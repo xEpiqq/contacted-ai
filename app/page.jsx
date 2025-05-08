@@ -8,6 +8,10 @@ import {
   XMarkIcon,
   PlusIcon,
   ChevronLeftIcon,
+  ChevronDownIcon,
+  UserIcon,
+  CreditCardIcon,
+  ArrowRightOnRectangleIcon,
 } from "@heroicons/react/24/outline";
 import { AnimatePresence, motion } from "framer-motion";
 import { BadgeButton } from "@/components/badge";
@@ -15,6 +19,7 @@ import { FileUp, ListFilter, Table, Upload, CheckCircle, CirclePlus, Loader, Dow
 import Papa from "papaparse";
 import { ChevronUpDownIcon } from "@heroicons/react/24/solid";
 import { Combobox } from "@headlessui/react";
+import { createClient } from "@/utils/supabase/client";
 
 /* Style block for tooltips */
 const tooltipStyles = `
@@ -312,15 +317,59 @@ function closestType(input) {
 
 /*────────────────────────────  PAGE  ────────────────────────────*/
 
-// Navbar component
-function Navbar({ onCreditsClick }) {
+// Modified Navbar component to include user profile
+function Navbar({ onCreditsClick, user, creditsRemaining, onUserClick, showUserDropdown, userDropdownRef, onManageBilling, onSignOut }) {
   return (
     <header className="w-full flex items-center justify-between px-4 py-3 text-xs text-white">
       <div className="flex items-center gap-3">
         <div className="h-7 w-7 rounded-full bg-neutral-500" />
-        <span className="text-white">
-          Jayden
-        </span>
+        {/* Email dropdown on the left side */}
+        <div className="relative" ref={userDropdownRef}>
+          <div 
+            className="flex items-center gap-2 cursor-pointer hover:text-blue-400 transition-colors"
+            onClick={onUserClick}
+          >
+            <span className="text-white max-w-[200px] truncate">
+              {user?.email || "User"}
+            </span>
+            <ChevronDownIcon className="h-4 w-4 text-neutral-400" />
+          </div>
+          
+          {/* Dropdown menu */}
+          <AnimatePresence>
+            {showUserDropdown && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                transition={{ duration: 0.15 }}
+                className="absolute left-0 mt-2 w-48 bg-[#252525] border border-[#404040] rounded-lg shadow-lg overflow-hidden z-50"
+              >
+                <div className="py-1">
+                  <div className="px-4 py-2 border-b border-[#404040]">
+                    <p className="text-sm font-medium text-white truncate">{user?.email || "User"}</p>
+                  </div>
+                  
+                  <button
+                    onClick={onManageBilling}
+                    className="w-full px-4 py-2 text-left text-sm text-neutral-300 hover:bg-[#303030] flex items-center"
+                  >
+                    <CreditCardIcon className="h-4 w-4 mr-2" />
+                    <span>Manage Billing</span>
+                  </button>
+                  
+                  <button
+                    onClick={onSignOut}
+                    className="w-full px-4 py-2 text-left text-sm text-neutral-300 hover:bg-[#303030] flex items-center"
+                  >
+                    <ArrowRightOnRectangleIcon className="h-4 w-4 mr-2" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
       
       <div className="flex items-center gap-2">
@@ -332,7 +381,7 @@ function Navbar({ onCreditsClick }) {
           onClick={onCreditsClick}
         >
           <Gem className="h-4 w-4 text-green-400" />
-          <span className="text-white font-medium">2,482</span>
+          <span className="text-white font-medium">{creditsRemaining?.toLocaleString() || "2,482"}</span>
           <span className="text-[10px] text-neutral-400 ml-1">credits</span>
         </div>
       </div>
@@ -1157,7 +1206,6 @@ export default function Login() {
 
   // Plus button dropdown state
   const [showPlusOptions, setShowPlusOptions] = useState(false);
-  const [isExtensionLoading, setIsExtensionLoading] = useState(false);
   const plusButtonRef = useRef(null);
 
   // Manual search mode state
@@ -1174,9 +1222,102 @@ export default function Login() {
 
   // Change creditsModalOpen to creditsScreenOpen
   const [creditsScreenOpen, setCreditsScreenOpen] = useState(false);
-
-  // Chrome extension download feedback
+  
+  // Chrome extension download state
+  const [isExtensionLoading, setIsExtensionLoading] = useState(false);
   const [showExtensionToast, setShowExtensionToast] = useState(false);
+  
+  // User dropdown state
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const userDropdownRef = useRef(null);
+  
+  // User data for display
+  const [user, setUser] = useState(null);
+  const [creditsRemaining, setCreditsRemaining] = useState(2482);
+  
+  // Fetch user data from Supabase when component mounts
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const supabase = createClient();
+        const { data } = await supabase.auth.getUser();
+        if (data?.user) {
+          setUser(data.user);
+          
+          // Fetch user profile from profiles table
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('user_id', data.user.id)
+            .single();
+            
+          if (profile) {
+            // Calculate credits
+            const subscriptionUsed = profile.tokens_used || 0;
+            const subscriptionTotal = profile.tokens_total || 0;
+            const oneTime = profile.one_time_credits || 0;
+            const oneTimeUsed = profile.one_time_credits_used || 0;
+            
+            const totalUsed = subscriptionUsed + oneTimeUsed;
+            const totalAll = subscriptionTotal + oneTime;
+            const remaining = totalAll - totalUsed;
+            
+            setCreditsRemaining(remaining);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+      }
+    };
+    
+    fetchUserData();
+  }, []);
+
+  // Handle billing portal redirect
+  const handleBillingPortal = async () => {
+    try {
+      const res = await fetch("/api/manage-billing", { method: "POST" });
+      const { url, error } = await res.json();
+      
+      if (error) {
+        console.error("Billing portal error:", error);
+      } else {
+        window.location.href = url;
+      }
+      
+      setShowUserDropdown(false);
+    } catch (err) {
+      console.error("Billing portal error:", err);
+    }
+  };
+
+  // Handle sign out
+  const handleSignOut = async () => {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      window.location.href = "/sign-in";
+    } catch (error) {
+      console.error("Sign out error:", error);
+    }
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target)) {
+        setShowUserDropdown(false);
+      }
+      if (plusButtonRef.current && !plusButtonRef.current.contains(event.target)) {
+        setShowPlusOptions(false);
+      }
+    }
+    
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [userDropdownRef, plusButtonRef]);
 
   /* ---------- auto-grow ---------- */
   useEffect(() => {
@@ -2140,7 +2281,16 @@ export default function Login() {
 
   return (
     <>
-      <Navbar onCreditsClick={() => setCreditsScreenOpen(true)} />
+      <Navbar 
+        onCreditsClick={() => setCreditsScreenOpen(true)} 
+        user={user}
+        creditsRemaining={creditsRemaining}
+        onUserClick={() => setShowUserDropdown(!showUserDropdown)}
+        showUserDropdown={showUserDropdown}
+        userDropdownRef={userDropdownRef}
+        onManageBilling={handleBillingPortal}
+        onSignOut={handleSignOut}
+      />
       
       <AnimatePresence mode="wait">
         {manualMode ? (
