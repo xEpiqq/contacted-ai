@@ -46,6 +46,39 @@ const tooltipStyles = `
   }
 `;
 
+/* Table scrollbar styles specifically for the results table */
+const tableScrollbarStyles = `
+  /* Table scrollbar styles */
+  .table-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  
+  .table-scrollbar::-webkit-scrollbar-track {
+    background: rgba(20, 20, 20, 0.2);
+    border-radius: 3px;
+  }
+  
+  .table-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(50, 50, 50, 0.7);
+    border-radius: 3px;
+  }
+  
+  .table-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(70, 70, 70, 0.8);
+  }
+  
+  .table-scrollbar::-webkit-scrollbar-corner {
+    background: rgba(20, 20, 20, 0.2);
+  }
+  
+  /* For Firefox */
+  .table-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(50, 50, 50, 0.7) rgba(20, 20, 20, 0.2);
+  }
+`;
+
 /*────────────────────────────  SHARED  ───────────────────────────*/
 
 function ToggleSwitch({ value, onChange }) {
@@ -887,6 +920,168 @@ function CreditsModal({ isOpen, onClose }) {
   return null; // This component is no longer used
 }
 
+// Results Display Component
+function ResultsDisplay({ 
+  onReset,
+  searchFilters,
+  searchResults,
+  resultsLoading,
+  searchPage,
+  totalResults,
+  totalPages,
+  onPageChange,
+  searchLimit,
+  answerType
+}) {
+  // Available columns for displaying in a simpler format
+  const displayColumns = [
+    "Full name",
+    "Job title", 
+    "Company",
+    "Emails",
+    "Phone numbers"
+  ];
+  
+  // Helper to format numbers with commas
+  const formatNumber = (num) => {
+    return new Intl.NumberFormat().format(num);
+  };
+  
+  return (
+    <div className="w-full max-w-[690px] mx-auto">
+      {/* Results header */}
+      <div className="mb-4 flex justify-between items-center">
+        <div>
+          <h3 className="text-white font-medium text-lg">
+            Search Results
+            {totalResults > 0 && <span className="text-green-400 ml-2 text-base">({formatNumber(totalResults)})</span>}
+          </h3>
+          <p className="text-neutral-400 text-xs">
+            Based on your search criteria • {answerType === "people" ? "People Database" : "Local Business Database"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onReset}
+            className="px-3 py-1.5 rounded bg-[#303030] hover:bg-[#3a3a3a] text-xs text-white transition-colors flex items-center gap-1"
+          >
+            <Search className="h-3 w-3" />
+            <span>New Search</span>
+          </button>
+        </div>
+      </div>
+      
+      {/* Search criteria pills */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {searchFilters.map((filter, idx) => {
+          const prefix = idx === 0 ? "" : filter.subop;
+          return (
+            <div 
+              key={idx}
+              className={`px-2 py-1 rounded-full text-xs 
+                ${idx === 0 
+                  ? "bg-blue-900/20 text-blue-400 border border-blue-900/30" 
+                  : "bg-neutral-800 text-neutral-400 border border-neutral-700"}
+              `}
+            >
+              {prefix && <span className="mr-1 font-medium">{prefix}</span>}
+              <span className="font-medium">{filter.column}</span>
+              <span className="mx-1">•</span>
+              <span>
+                {filter.tokens && filter.tokens.length > 0 
+                  ? filter.tokens.join(", ") 
+                  : filter.condition}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      
+      {/* Results table in a rounded container */}
+      <div className="rounded-xl bg-[#252525] border border-[#3a3a3a] overflow-hidden mb-4">
+        {resultsLoading ? (
+          <div className="p-6 flex flex-col items-center justify-center">
+            <div className="animate-spin mb-3">
+              <Loader className="h-6 w-6 text-neutral-400" />
+            </div>
+            <p className="text-neutral-400 text-sm">Finding matches...</p>
+          </div>
+        ) : searchResults.length > 0 ? (
+          <>
+            <div className="overflow-x-auto table-scrollbar">
+              <table className="w-full border-collapse">
+                <thead className="bg-[#303030]">
+                  <tr>
+                    {displayColumns.map(col => (
+                      <th key={col} className="px-4 py-3 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider whitespace-nowrap">
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#3a3a3a]">
+                  {searchResults.slice(0, 5).map((result, idx) => (
+                    <tr key={idx} className="hover:bg-[#2a2a2a] transition-colors">
+                      {displayColumns.map(col => (
+                        <td key={col} className="px-4 py-3 text-sm text-neutral-300 max-w-[200px] truncate">
+                          {result[col] || "-"}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            {/* Footer with pagination */}
+            <div className="px-4 py-3 border-t border-[#3a3a3a] flex justify-between items-center bg-[#303030]">
+              <div className="text-xs text-neutral-500">
+                Showing {searchPage * searchLimit + 1} to {Math.min((searchPage + 1) * searchLimit, totalResults)} of {formatNumber(totalResults)}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => onPageChange(Math.max(0, searchPage - 1))}
+                  disabled={searchPage === 0}
+                  className="px-2 py-1 rounded text-xs text-neutral-400 hover:bg-[#404040] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => onPageChange(searchPage + 1)}
+                  disabled={searchPage >= totalPages - 1}
+                  className="px-2 py-1 rounded text-xs text-neutral-400 hover:bg-[#404040] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="p-6 text-center">
+            <p className="text-neutral-400 text-sm">No matching results found</p>
+            <button
+              onClick={onReset}
+              className="mt-3 px-3 py-1 rounded bg-[#303030] hover:bg-[#3a3a3a] text-xs text-white transition-colors"
+            >
+              Try Different Criteria
+            </button>
+          </div>
+        )}
+      </div>
+      
+      {/* Optional actions row */}
+      {searchResults.length > 0 && (
+        <div className="flex justify-end gap-2 mt-2">
+          <button className="px-3 py-1 text-xs rounded-md bg-green-900/20 text-green-400 border border-green-800/30 hover:bg-green-900/30 transition-colors flex items-center gap-1">
+            <Download className="h-3 w-3" />
+            <span>Export Results</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Login() {
   /* ---------- state ---------- */
   const [text, setText] = useState("");
@@ -962,6 +1157,7 @@ export default function Login() {
 
   // Plus button dropdown state
   const [showPlusOptions, setShowPlusOptions] = useState(false);
+  const [isExtensionLoading, setIsExtensionLoading] = useState(false);
   const plusButtonRef = useRef(null);
 
   // Manual search mode state
@@ -978,6 +1174,9 @@ export default function Login() {
 
   // Change creditsModalOpen to creditsScreenOpen
   const [creditsScreenOpen, setCreditsScreenOpen] = useState(false);
+
+  // Chrome extension download feedback
+  const [showExtensionToast, setShowExtensionToast] = useState(false);
 
   /* ---------- auto-grow ---------- */
   useEffect(() => {
@@ -1030,7 +1229,11 @@ export default function Login() {
     return () => clearTimeout(t);
   }, [displayedText, isDeleting, wordIndex, currentStep]);
 
+  // Update hasText to check for badges as well
   const hasText = text.trim().length > 0;
+  const hasBadges = (currentStep === 1 && answerType === "people" && ((brainstorm && brainstormExamples.length > 0) || (!brainstorm && selectedExamples.length > 0))) || 
+                   (currentStep === 2 && selectedIndustries.length > 0);
+  const canProceed = hasText || hasBadges;
 
   /* ---------- heading ---------- */
   let headingText = "";
@@ -1210,7 +1413,28 @@ export default function Login() {
   /* ---------- submit ---------- */
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!hasText) return;
+
+    // For steps 1 & 2, first convert any pending text to a badge
+    if ((currentStep === 1 || currentStep === 2) && text.trim()) {
+      const trimmedText = text.trim();
+      
+      if (currentStep === 1) {
+        if (answerType === "people") {
+          if (brainstorm) {
+            setBrainstormExamples(prev => [...prev, trimmedText]);
+          } else {
+            setSelectedExamples(prev => [...prev, trimmedText]);
+          }
+        }
+      } else if (currentStep === 2) {
+        setSelectedIndustries(prev => [...prev, trimmedText]);
+      }
+      
+      setText("");
+    }
+    
+    // Now check if we can proceed (either had text that's now a badge, or already had badges)
+    if (!hasBadges && !hasText) return;
 
     /* ---- FROM STEP 0 → STEP 1 ---- */
     if (currentStep === 0) {
@@ -1221,67 +1445,76 @@ export default function Login() {
     /* ---- STEP 1 JOB TITLE FLOW ---- */
     if (currentStep === 1 && answerType === "people" && brainstorm) {
       // Brainstorm processing
-      setBrainstormQuery(text);
-      setIsProcessing(true);
-      setText("");
+      if (hasText) {
+        setBrainstormQuery(text);
+        setIsProcessing(true);
+        setText("");
 
-      setTimeout(() => {
-        setIsProcessing(false);
         setTimeout(() => {
-          setShowSuggestions(true);
-          const query = text.toLowerCase();
-          let suggestions = [];
+          setIsProcessing(false);
+          setTimeout(() => {
+            setShowSuggestions(true);
+            const query = text.toLowerCase();
+            let suggestions = [];
 
-          if (
-            query.includes("software") ||
-            query.includes("app") ||
-            query.includes("tech")
-          ) {
-            suggestions = [
-              "Software Engineer",
-              "Product Manager",
-              "CTO",
-              "Technical Lead",
-              "QA Manager",
-            ];
-          } else if (
-            query.includes("marketing") ||
-            query.includes("ads") ||
-            query.includes("brand")
-          ) {
-            suggestions = [
-              "Marketing Director",
-              "Brand Manager",
-              "Social Media Specialist",
-              "SEO Expert",
-              "Content Strategist",
-            ];
-          } else if (
-            query.includes("finance") ||
-            query.includes("accounting") ||
-            query.includes("money")
-          ) {
-            suggestions = [
-              "CFO",
-              "Financial Analyst",
-              "Accounting Manager",
-              "Controller",
-              "Investment Advisor",
-            ];
-          } else {
-            suggestions = [
-              "CEO",
-              "Operations Manager",
-              "Department Head",
-              "Director of Sales",
-              "HR Manager",
-            ];
-          }
+            if (
+              query.includes("software") ||
+              query.includes("app") ||
+              query.includes("tech")
+            ) {
+              suggestions = [
+                "Software Engineer",
+                "Product Manager",
+                "CTO",
+                "Technical Lead",
+                "QA Manager",
+              ];
+            } else if (
+              query.includes("marketing") ||
+              query.includes("ads") ||
+              query.includes("brand")
+            ) {
+              suggestions = [
+                "Marketing Director",
+                "Brand Manager",
+                "Social Media Specialist",
+                "SEO Expert",
+                "Content Strategist",
+              ];
+            } else if (
+              query.includes("finance") ||
+              query.includes("accounting") ||
+              query.includes("money")
+            ) {
+              suggestions = [
+                "CFO",
+                "Financial Analyst",
+                "Accounting Manager",
+                "Controller",
+                "Investment Advisor",
+              ];
+            } else {
+              suggestions = [
+                "CEO",
+                "Operations Manager",
+                "Department Head",
+                "Director of Sales",
+                "HR Manager",
+              ];
+            }
 
-          setBrainstormSuggestions(suggestions);
-        }, 300);
-      }, 1000);
-      return;
+            setBrainstormSuggestions(suggestions);
+          }, 300);
+        }, 1000);
+        return;
+      } else if (brainstormExamples.length > 0) {
+        // Allow proceeding with just badges
+        setCurrentStep(2);
+        setText("");
+        setShowIndustryExamples(true);
+        textareaRef.current?.focus();
+        return;
+      }
     }
 
     // STEP 1 (non-brainstorm) or local biz flow → STEP 2 (industry)
@@ -1295,18 +1528,76 @@ export default function Login() {
 
     // ---- FINAL SUBMIT FROM STEP 3 (industry) ----
     if (currentStep === 2) {
-      // TODO: final submission logic
-      console.log("Submit final data", {
-        type: answerType,
-        jobTitles: brainstorm
-          ? [...brainstormExamples, ...selectedKeywords]
-          : selectedExamples,
-        industries: selectedIndustries,
-      });
-      // For now, just clear everything
+      // Convert user selections to search filters and fetch results
+      const finalFilters = buildSearchFilters();
+      setSearchFilters(finalFilters);
+      setCurrentStep(3); // Move to results display step
       setText("");
+      fetchSearchResultsWithFilters(0, finalFilters);
       return;
     }
+  };
+
+  // Convert user selections from the multi-step workflow into search filters
+  const buildSearchFilters = () => {
+    const filters = [];
+    
+    // Add job title filter for people search
+    if (answerType === "people") {
+      const jobTitles = brainstorm 
+        ? [...brainstormExamples, ...selectedKeywords] 
+        : selectedExamples;
+      
+      // Include any uncommitted text in the input field
+      const uncommittedText = text.trim();
+      if (uncommittedText) {
+        jobTitles.push(uncommittedText);
+      }
+      
+      if (jobTitles.length > 0) {
+        filters.push({
+          column: "Job title",
+          condition: "contains",
+          tokens: jobTitles,
+          pendingText: "",
+          subop: ""
+        });
+      }
+    }
+    
+    // Add local business type filter for local biz search
+    if (answerType === "local biz" && text.trim()) {
+      filters.push({
+        column: "Company",
+        condition: "contains",
+        tokens: [text.trim()],
+        pendingText: "",
+        subop: ""
+      });
+    }
+    
+    // Add industry filter
+    if (selectedIndustries.length > 0 || text.trim()) {
+      const industries = [...selectedIndustries];
+      
+      // Include any uncommitted text in the input field
+      const uncommittedText = text.trim();
+      if (uncommittedText && !industries.includes(uncommittedText)) {
+        industries.push(uncommittedText);
+      }
+      
+      if (industries.length > 0) {
+        filters.push({
+          column: "Industry",
+          condition: "contains",
+          tokens: industries,
+          pendingText: "",
+          subop: filters.length > 0 ? "AND" : ""
+        });
+      }
+    }
+    
+    return filters;
   };
 
   const handleSuggestionSelect = (suggestion) => {
@@ -1823,6 +2114,27 @@ export default function Login() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [plusButtonRef]);
+
+  /* ---------- handle reset/new search ---------- */
+  const handleResetSearch = () => {
+    setCurrentStep(0);
+    setAnswerType("");
+    setText("");
+    setSelectedExamples([]);
+    setBrainstormExamples([]);
+    setSelectedIndustries([]);
+    setBrainstorm(false);
+    setSearchResults([]);
+    setSearchFilters([]);
+    setSearchPage(0);
+    setTotalResults(0);
+    setExactMatch(false);
+    setSelectedKeywords([]);
+    setBrainstormSuggestions([]);
+    setShowSuggestions(false);
+    setSuggestion("");
+    setSuggestActive(false);
+  };
 
   /*────────────────────────────  RENDER  ─────────────────────────*/
 
@@ -2431,6 +2743,8 @@ export default function Login() {
               }
               
               ${tooltipStyles}
+              
+              ${tableScrollbarStyles}
             `}</style>
 
             {/* step badges */}
@@ -2729,16 +3043,18 @@ export default function Login() {
                         Add industries
                       </p>
                     )}
-                    <div className="w-full flex justify-center">
-                      <h1 className="text-3xl sm:text-2xl font-medium">
-                        {headingText}
-                        {currentStep === 1 &&
-                          answerType === "people" &&
-                          !brainstorm && (
-                            <span className="text-neutral-500">(s)</span>
-                          )}
-                      </h1>
-                    </div>
+                    {currentStep < 3 && (
+                      <div className="w-full flex justify-center">
+                        <h1 className="text-3xl sm:text-2xl font-medium">
+                          {headingText}
+                          {currentStep === 1 &&
+                            answerType === "people" &&
+                            !brainstorm && (
+                              <span className="text-neutral-500">(s)</span>
+                            )}
+                        </h1>
+                      </div>
+                    )}
                   </motion.div>
                 </AnimatePresence>
 
@@ -2765,208 +3081,229 @@ export default function Login() {
                   )}
 
                 {/* form */}
-                <form
-                  onSubmit={handleSubmit}
-                  className="rounded-3xl bg-[#303030] shadow-sm relative"
-                >
-                  <div className="flex flex-col px-4 py-2">
-                    <div className="flex items-center flex-wrap gap-2">
-                      {/* STEP 2 badges */}
-                      {currentStep === 1 &&
-                        answerType === "people" &&
-                        !brainstorm &&
-                        selectedExamples.map((example, index) => (
-                          <Badge
-                            key={index}
-                            onRemove={() => handleBadgeRemove(index)}
-                          >
-                            {example}
-                          </Badge>
-                        ))}
+                {currentStep < 3 && (
+                  <form
+                    onSubmit={handleSubmit}
+                    className="rounded-3xl bg-[#303030] shadow-sm relative"
+                  >
+                    <div className="flex flex-col px-4 py-2">
+                      <div className="flex items-center flex-wrap gap-2">
+                        {/* STEP 2 badges */}
+                        {currentStep === 1 &&
+                          answerType === "people" &&
+                          !brainstorm &&
+                          selectedExamples.map((example, index) => (
+                            <Badge
+                              key={index}
+                              onRemove={() => handleBadgeRemove(index)}
+                            >
+                              {example}
+                            </Badge>
+                          ))}
 
-                      {currentStep === 1 &&
-                        answerType === "people" &&
-                        brainstorm &&
-                        !showSuggestions &&
-                        brainstormExamples.map((example, index) => (
-                          <Badge
-                            key={index}
-                            onRemove={() => handleBadgeRemove(index)}
-                          >
-                            {example}
-                          </Badge>
-                        ))}
+                        {currentStep === 1 &&
+                          answerType === "people" &&
+                          brainstorm &&
+                          !showSuggestions &&
+                          brainstormExamples.map((example, index) => (
+                            <Badge
+                              key={index}
+                              onRemove={() => handleBadgeRemove(index)}
+                            >
+                              {example}
+                            </Badge>
+                          ))}
 
-                      {/* STEP 3 industry badges */}
-                      {currentStep === 2 &&
-                        selectedIndustries.map((ind, idx) => (
-                          <Badge
-                            key={idx}
-                            onRemove={() => handleBadgeRemove(idx)}
-                          >
-                            {ind}
-                          </Badge>
-                        ))}
+                        {/* STEP 3 industry badges */}
+                        {currentStep === 2 &&
+                          selectedIndustries.map((ind, idx) => (
+                            <Badge
+                              key={idx}
+                              onRemove={() => handleBadgeRemove(idx)}
+                            >
+                              {ind}
+                            </Badge>
+                          ))}
 
-                      <textarea
-                        ref={textareaRef}
-                        rows={2}
-                        placeholder={
-                          currentStep === 0
-                            ? displayedText
-                            : currentStep === 1 && brainstorm
-                            ? "i sell commercial window cleaning services..."
-                            : currentStep === 2
-                            ? "software, healthcare..."
-                            : ""
-                        }
-                        value={text}
-                        onChange={handleTextChange}
-                        onKeyDown={handleKeyDown}
-                        className="flex-1 ml-2 resize-none overflow-hidden bg-transparent placeholder:text-neutral-400 text-sm leading-6 outline-none"
-                      />
+                        <textarea
+                          ref={textareaRef}
+                          rows={2}
+                          placeholder={
+                            currentStep === 0
+                              ? displayedText
+                              : currentStep === 1 && brainstorm
+                              ? "i sell commercial window cleaning services..."
+                              : currentStep === 2
+                              ? "software, healthcare..."
+                              : ""
+                          }
+                          value={text}
+                          onChange={handleTextChange}
+                          onKeyDown={handleKeyDown}
+                          className="flex-1 ml-2 resize-none overflow-hidden bg-transparent placeholder:text-neutral-400 text-sm leading-6 outline-none"
+                        />
 
-                      <button
-                        type="submit"
-                        disabled={!hasText}
-                        className={`ml-2 h-9 w-9 flex items-center justify-center rounded-full transition-opacity ${
-                          hasText
-                            ? "bg-white text-black hover:opacity-90"
-                            : "bg-neutral-600 text-white cursor-not-allowed opacity-60"
-                        }`}
-                      >
-                        <ArrowUpIcon className="h-5 w-5" />
-                      </button>
-                    </div>
-
-                    {/* ChatGPT-style buttons - only show on step 1 */}
-                    {currentStep === 0 && (
-                      <div className="flex items-center justify-start gap-2 mt-2 px-2 pt-2 border-t border-neutral-600/30">
-                        <button 
-                          type="button"
-                          onClick={() => setDrawerOpen(true)}
-                          className="tooltip px-4 py-2 rounded-full text-xs font-medium text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors flex items-center gap-2"
-                          data-tooltip="Enrich your data"
+                        <button
+                          type="submit"
+                          disabled={!canProceed}
+                          className={`ml-2 h-9 w-9 flex items-center justify-center rounded-full transition-opacity ${
+                            canProceed
+                              ? "bg-white text-black hover:opacity-90"
+                              : "bg-neutral-600 text-white cursor-not-allowed opacity-60"
+                          }`}
                         >
-                          <FileUp className="h-4 w-4" />
-                          <span>Enrich</span>
+                          <ArrowUpIcon className="h-5 w-5" />
                         </button>
-                        <button 
-                          type="button"
-                          onClick={() => setExportsDrawerOpen(true)}
-                          className="tooltip px-4 py-2 rounded-full text-xs font-medium text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors flex items-center gap-2"
-                          data-tooltip="View your exports"
-                        >
-                          <Table className="h-4 w-4" />
-                          <span>Exports</span>
-                        </button>
-                        <button 
-                          type="button"
-                          onClick={() => setCreditsScreenOpen(true)}
-                          className="tooltip px-4 py-2 rounded-full text-xs font-medium text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors flex items-center gap-2"
-                          data-tooltip="Purchase credits"
-                        >
-                          <Gem className="h-4 w-4" />
-                          <span>Get Credits</span>
-                        </button>
-                        <div className="relative" ref={plusButtonRef}>
-                          <div className="flex items-center">
-                            {/* Sliding glass door container that includes the button */}
-                            <div className="overflow-hidden">
-                              <motion.div 
-                                className="flex items-center gap-2"
-                                initial={{ width: 48 }} /* Initial width to show just the button */
-                                animate={{ width: showPlusOptions ? 'auto' : 48 }}
-                                transition={{ duration: 0.25, ease: "easeOut" }}
-                              >
-                                {/* Buttons revealed when sliding */}
-                                <AnimatePresence mode="wait">
-                                  {showPlusOptions && (
-                                    <motion.div 
-                                      className="flex items-center gap-2"
-                                      initial={{ opacity: 0 }}
-                                      animate={{ opacity: 1 }}
-                                      exit={{ opacity: 0 }}
-                                      transition={{ duration: 0.15 }}
-                                    >
-                                      <button className="tooltip px-4 py-2 rounded-full text-xs font-medium text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors flex items-center gap-2 whitespace-nowrap"
-                                        data-tooltip="Switch to manual mode"
-                                        onClick={() => {
-                                          setManualMode(true);
-                                          setShowPlusOptions(false);
-                                          // Add an initial empty filter
-                                          setPendingSearchFilters([{
-                                            column: "",
-                                            condition: "contains",
-                                            tokens: [],
-                                            pendingText: "",
-                                            subop: ""
-                                          }]);
-                                          // Fetch initial results with no filters
-                                          fetchSearchResults(0);
-                                        }}
-                                      >
-                                        <ListFilter className="h-4 w-4" />
-                                        <span>Manual</span>
-                                      </button>
-                                      <button className="tooltip px-4 py-2 rounded-full text-xs font-medium text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors flex items-center gap-2 whitespace-nowrap"
-                                        data-tooltip="Install Chrome extension"
-                                      >
-                                        <Chrome className="h-4 w-4" />
-                                        <span>Extension</span>
-                                      </button>
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
-                                
-                                {/* Button that triggers the slide and moves with it */}
-                                <button 
-                                  type="button"
-                                  onClick={() => setShowPlusOptions(!showPlusOptions)}
-                                  className="h-9 w-9 rounded-full flex items-center justify-center text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors ml-1"
+                      </div>
+
+                      {/* ChatGPT-style buttons - only show on step 1 */}
+                      {currentStep === 0 && (
+                        <div className="flex items-center justify-start gap-2 mt-2 px-2 pt-2 border-t border-neutral-600/30">
+                          <button 
+                            type="button"
+                            onClick={() => setDrawerOpen(true)}
+                            className="tooltip px-4 py-2 rounded-full text-xs font-medium text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors flex items-center gap-2"
+                            data-tooltip="Enrich your data"
+                          >
+                            <FileUp className="h-4 w-4" />
+                            <span>Enrich</span>
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => setExportsDrawerOpen(true)}
+                            className="tooltip px-4 py-2 rounded-full text-xs font-medium text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors flex items-center gap-2"
+                            data-tooltip="View your exports"
+                          >
+                            <Table className="h-4 w-4" />
+                            <span>Exports</span>
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => setCreditsScreenOpen(true)}
+                            className="tooltip px-4 py-2 rounded-full text-xs font-medium text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors flex items-center gap-2"
+                            data-tooltip="Purchase credits"
+                          >
+                            <Gem className="h-4 w-4" />
+                            <span>Get Credits</span>
+                          </button>
+                          <div className="relative" ref={plusButtonRef}>
+                            <div className="flex items-center">
+                              {/* Sliding glass door container that includes the button */}
+                              <div className="overflow-hidden">
+                                <motion.div 
+                                  className="flex items-center gap-2"
+                                  initial={{ width: 48 }} /* Initial width to show just the button */
+                                  animate={{ width: showPlusOptions ? 'auto' : 48 }}
+                                  transition={{ duration: 0.25, ease: "easeOut" }}
                                 >
-                                  {showPlusOptions ? (
-                                    <svg width="10" height="14" viewBox="0 0 10 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                      <path d="M8 2L3 7L8 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                  ) : (
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  )}
-                                </button>
-                              </motion.div>
+                                  {/* Buttons revealed when sliding */}
+                                  <AnimatePresence mode="wait">
+                                    {showPlusOptions && (
+                                      <motion.div 
+                                        className="flex items-center gap-2"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        transition={{ duration: 0.15 }}
+                                      >
+                                        <button className="tooltip px-4 py-2 rounded-full text-xs font-medium text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors flex items-center gap-2 whitespace-nowrap"
+                                          data-tooltip="Switch to manual mode"
+                                          onClick={() => {
+                                            setManualMode(true);
+                                            setShowPlusOptions(false);
+                                            // Add an initial empty filter
+                                            setPendingSearchFilters([{
+                                              column: "",
+                                              condition: "contains",
+                                              tokens: [],
+                                              pendingText: "",
+                                              subop: ""
+                                            }]);
+                                            // Fetch initial results with no filters
+                                            fetchSearchResults(0);
+                                          }}
+                                        >
+                                          <ListFilter className="h-4 w-4" />
+                                          <span>Manual</span>
+                                        </button>
+                                        <button className={`tooltip px-4 py-2 rounded-full text-xs font-medium text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors flex items-center gap-2 whitespace-nowrap ${isExtensionLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                          data-tooltip="Install Chrome extension"
+                                          onClick={() => {
+                                            if (isExtensionLoading) return;
+                                            setIsExtensionLoading(true);
+                                            // Use a timeout to ensure the loading state is visible
+                                            setTimeout(() => {
+                                              window.location.href = "/api/chrome-extension";
+                                              // Show toast notification
+                                              setShowExtensionToast(true);
+                                              // Hide toast after 5 seconds
+                                              setTimeout(() => setShowExtensionToast(false), 5000);
+                                              // Reset loading state after a delay
+                                              setTimeout(() => setIsExtensionLoading(false), 2000);
+                                            }, 300);
+                                          }}
+                                          disabled={isExtensionLoading}
+                                        >
+                                          {isExtensionLoading ? (
+                                            <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full mr-1"></div>
+                                          ) : (
+                                            <Chrome className="h-4 w-4" />
+                                          )}
+                                          <span>{isExtensionLoading ? "Downloading..." : "Extension"}</span>
+                                        </button>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                  
+                                  {/* Button that triggers the slide and moves with it */}
+                                  <button 
+                                    type="button"
+                                    onClick={() => setShowPlusOptions(!showPlusOptions)}
+                                    className="h-9 w-9 rounded-full flex items-center justify-center text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors ml-1"
+                                  >
+                                    {showPlusOptions ? (
+                                      <svg width="10" height="14" viewBox="0 0 10 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M8 2L3 7L8 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </svg>
+                                    ) : (
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    )}
+                                  </button>
+                                </motion.div>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-
-                    {/* dropdown for step 1 suggestions */}
-                    <AnimatePresence>
-                      {currentStep === 0 && suggestion && (
-                        <motion.ul
-                          className="absolute left-0 top-full w-full mt-1 rounded-2xl bg-[#2b2b2b] border border-[#404040] overflow-hidden"
-                          initial={{ opacity: 0, y: 4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: 4 }}
-                          transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                        >
-                          <li
-                            className={`px-4 py-2 text-sm cursor-pointer select-none ${
-                              suggestActive
-                                ? "bg-[#3a3a3a]"
-                                : "hover:bg-[#3a3a3a]"
-                            }`}
-                            onMouseEnter={() => setSuggestActive(true)}
-                            onMouseLeave={() => setSuggestActive(false)}
-                            onClick={() => proceedStep0(suggestion)}
-                          >
-                            {suggestion}
-                          </li>
-                        </motion.ul>
                       )}
-                    </AnimatePresence>
-                  </div>
-                </form>
+
+                      {/* dropdown for step 1 suggestions */}
+                      <AnimatePresence>
+                        {currentStep === 0 && suggestion && (
+                          <motion.ul
+                            className="absolute left-0 top-full w-full mt-1 rounded-2xl bg-[#2b2b2b] border border-[#404040] overflow-hidden"
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 4 }}
+                            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                          >
+                            <li
+                              className={`px-4 py-2 text-sm cursor-pointer select-none ${
+                                suggestActive
+                                  ? "bg-[#3a3a3a]"
+                                  : "hover:bg-[#3a3a3a]"
+                              }`}
+                              onMouseEnter={() => setSuggestActive(true)}
+                              onMouseLeave={() => setSuggestActive(false)}
+                              onClick={() => proceedStep0(suggestion)}
+                            >
+                              {suggestion}
+                            </li>
+                          </motion.ul>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </form>
+                )}
 
                 {/* database size indicator - only visible on step 1 */}
                 {currentStep === 0 && (
@@ -2974,6 +3311,41 @@ export default function Login() {
                     <span className="text-xs text-neutral-600">270,394,457 contacts</span>
                   </div>
                 )}
+                
+                {/* Results Display - displayed when we reach step 3 */}
+                <AnimatePresence>
+                  {currentStep === 3 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.4, type: "spring", stiffness: 300, damping: 30 }}
+                      className="mt-8"
+                    >
+                      {/* Success message */}
+                      <div className="mb-6 text-center">
+                        <div className="inline-flex items-center justify-center h-12 w-12 rounded-full bg-green-900/20 border border-green-800/20 mb-3">
+                          <CheckCircle className="h-6 w-6 text-green-400" />
+                        </div>
+                        <h3 className="text-xl font-medium text-white">Results Found</h3>
+                        <p className="text-sm text-neutral-400 mt-1">We've found contacts matching your criteria</p>
+                      </div>
+                      
+                      <ResultsDisplay
+                        onReset={handleResetSearch}
+                        searchFilters={searchFilters}
+                        searchResults={searchResults}
+                        resultsLoading={resultsLoading}
+                        searchPage={searchPage}
+                        totalResults={totalResults}
+                        totalPages={totalPages}
+                        onPageChange={fetchSearchResults}
+                        searchLimit={searchLimit}
+                        answerType={answerType}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 {/* Brainstorm processing indicator */}
                 <AnimatePresence mode="wait">
@@ -3194,6 +3566,31 @@ export default function Login() {
               </div>
             </main>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Toast notification for Chrome extension download */}
+      <AnimatePresence>
+        {showExtensionToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            transition={{ duration: 0.3 }}
+            className="fixed bottom-5 right-5 bg-green-900/80 border border-green-700 text-green-100 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50"
+          >
+            <CheckCircle className="h-5 w-5 text-green-400" />
+            <div>
+              <p className="font-medium">Chrome Extension Download Started</p>
+              <p className="text-xs text-green-300 mt-0.5">Unzip the file and follow the installation instructions</p>
+            </div>
+            <button 
+              onClick={() => setShowExtensionToast(false)}
+              className="ml-2 text-green-300 hover:text-white"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
     </>
