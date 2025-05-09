@@ -1201,6 +1201,8 @@ export default function Login() {
   const [enrichLoading, setEnrichLoading] = useState(false);
   const [matchingCount, setMatchingCount] = useState(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [enrichmentComplete, setEnrichmentComplete] = useState(false);
+  const [enrichmentResult, setEnrichmentResult] = useState(null);
 
   // Plus button dropdown state
   const [showPlusOptions, setShowPlusOptions] = useState(false);
@@ -1235,6 +1237,13 @@ export default function Login() {
   // User data for display
   const [user, setUser] = useState(null);
   const [creditsRemaining, setCreditsRemaining] = useState(2482);
+  
+  // Add this after existing state variables
+  const [loadingText, setLoadingText] = useState("");
+  const loadingPhrases = ["Counting matches", "Processing data", "Reading LinkedIn profiles", "Finding contact details"];
+  
+  // Add this after existing loadingText state
+  const [loadingSteps, setLoadingSteps] = useState([]);
   
   // Fetch user data from Supabase when component mounts
   useEffect(() => {
@@ -1963,7 +1972,7 @@ export default function Login() {
     
     setEnrichLoading(true);
     setMatchingCount(null);
-    setShowConfirmation(false);
+    setLoadingSteps([]); // Reset loading steps
     
     try {
       const selectedColumn = selectedColumns[0];
@@ -1988,19 +1997,22 @@ export default function Login() {
       
       const data = await response.json();
       setMatchingCount(data.matchingCount || 0);
-      setShowConfirmation(true);
+      
+      // Don't end loading - keep showing the console with typing animation
+      // We'll keep enrichLoading true so the console stays visible
     } catch (error) {
       setUploadError(error.message);
-    } finally {
-      setEnrichLoading(false);
+      setEnrichLoading(false); // Only stop loading if there's an error
     }
   };
-  
+
   // Handle enrichment confirmation
   const handleConfirmEnrich = async () => {
-    if (selectedColumns.length === 0) return;
+    if (selectedColumns.length === 0 || !matchingCount) return;
     
     setEnrichLoading(true);
+    setEnrichmentComplete(false);
+    setEnrichmentResult(null);
     
     try {
       const selectedColumn = selectedColumns[0];
@@ -2037,18 +2049,24 @@ export default function Login() {
       if (data.success) {
         // Show success message
         setUploadError("");
-        setShowConfirmation(false);
-        setMatchingCount(null);
-        
-        // Reset drawer state to prepare for next use
-        handleDrawerClose();
         
         // Refresh the exports list
         setExportsFetched(false); // Force a refetch of exports
-        fetchExports(); // Immediately fetch the updated exports
+        const exportsResponse = await fetchExports(); // Immediately fetch the updated exports
         
-        // Show a success toast or message
-        alert("Enrichment completed successfully! The enriched data has been saved to your exports.");
+        // Find the newly created export (should be the most recent one)
+        let newExport = null;
+        if (exportsResponse && exportsResponse.length > 0) {
+          newExport = exportsResponse[0]; // The most recent export
+        }
+        
+        // Show the success screen with download option
+        setEnrichmentComplete(true);
+        setEnrichmentResult({
+          rowsEnriched: matchingCount,
+          exportId: newExport?.id,
+          exportName: newExport?.name || `${originalFilename} (Enriched)`
+        });
       } else {
         throw new Error("Enrichment failed");
       }
@@ -2056,6 +2074,30 @@ export default function Login() {
       setUploadError(error.message);
     } finally {
       setEnrichLoading(false);
+    }
+  };
+
+  // Reset the enrichment process and return to step 0
+  const resetEnrichment = () => {
+    // Clear all enrichment-related state
+    setEnrichmentComplete(false);
+    setEnrichmentResult(null);
+    setMatchingCount(null);
+    setShowConfirmation(false);
+    
+    // Reset the CSV data and related state
+    setCsvData(null);
+    setCsvColumns([]);
+    setSelectedColumns([]);
+    setAutoDetectedColumn(null);
+    setUploadError("");
+    
+    // Reset to the upload step
+    setUploadStep(0);
+    
+    // Clear the file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
@@ -2074,7 +2116,9 @@ export default function Login() {
   // Handle drawer close - reset upload state
   const handleDrawerClose = () => {
     setDrawerOpen(false);
-    resetUpload();
+    
+    // Use the resetEnrichment function to reset all state
+    resetEnrichment();
   };
 
   // Get sample data from selected column
@@ -2410,12 +2454,15 @@ export default function Login() {
         
         setExports(formattedExports);
         setExportsFetched(true); // Mark as fetched
+        return formattedExports; // Return the exports data
       } else {
         setExports([]);
+        return [];
       }
     } catch (error) {
       console.error("Error fetching exports:", error);
       setExportsError("Failed to load your exports. Please try again.");
+      return [];
     } finally {
       setExportsLoading(false);
     }
@@ -2460,6 +2507,74 @@ export default function Login() {
     const mb = kb / 1024;
     return `${mb.toFixed(1)} MB`;
   };
+
+  // Add this effect to create a typing animation for loading text
+  useEffect(() => {
+    if (!enrichLoading) return;
+
+    // If no steps, initialize with Counting matches...
+    if (loadingSteps.length === 0 && matchingCount === null) {
+      setLoadingSteps(['Counting matches...']);
+    }
+
+    let isCancelled = false;
+    let timeoutId;
+
+    // Find the first line that is not fully typed
+    let lines = loadingText.split('\n');
+    let currentStepIndex = lines.length - 1;
+    if (currentStepIndex < 0) currentStepIndex = 0;
+    if (currentStepIndex >= loadingSteps.length) currentStepIndex = loadingSteps.length - 1;
+    let charIndex = lines[currentStepIndex]?.length || 0;
+
+    function type() {
+      if (isCancelled) return;
+      // Build up all previous lines fully
+      let text = '';
+      if (currentStepIndex > 0) {
+        text += loadingSteps.slice(0, currentStepIndex).join('\n') + '\n';
+      }
+      // Animate the current line
+      if (!loadingSteps[currentStepIndex]) return; // Guard against undefined
+      text += loadingSteps[currentStepIndex].substring(0, charIndex);
+      setLoadingText(text);
+      if (charIndex < loadingSteps[currentStepIndex].length) {
+        charIndex++;
+        timeoutId = setTimeout(type, 35); // Slower typing speed
+      } else if (currentStepIndex < loadingSteps.length - 1) {
+        // Move to next line if there is one
+        currentStepIndex++;
+        charIndex = 0;
+        timeoutId = setTimeout(type, 250); // Small pause before next line
+      }
+    }
+
+    // Only animate if the last line is not fully typed
+    if (
+      lines.length < loadingSteps.length ||
+      lines[lines.length - 1] !== loadingSteps[lines.length - 1]
+    ) {
+      type();
+    }
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timeoutId);
+      if (!enrichLoading) {
+        setLoadingText("");
+      }
+    };
+  }, [enrichLoading, loadingSteps]);
+
+  // Effect to add "Found X matches" step when matchingCount is available
+  useEffect(() => {
+    if (enrichLoading && matchingCount !== null) {
+      const foundMatchesText = `• Found ${matchingCount} matches`;
+      if (loadingSteps.length > 0 && loadingSteps[0] === 'Counting matches...' && (loadingSteps.length === 1 || loadingSteps[1] !== foundMatchesText)) {
+        setLoadingSteps(['Counting matches...', foundMatchesText]);
+      }
+    }
+  }, [enrichLoading, matchingCount]);
 
   /*────────────────────────────  RENDER  ─────────────────────────*/
 
@@ -2621,55 +2736,123 @@ export default function Login() {
                     ) : uploadStep === 1 ? (
                       <div className="space-y-4">
                         {/* Put the header text back at the top */}
-                        <h3 className="font-medium">Which column contains LinkedIn URLs?</h3>
+                        {!enrichLoading && <h3 className="font-medium">Which column contains LinkedIn URLs?</h3>}
                         
                         {/* Loading indicator */}
-                        {enrichLoading && (
-                          <div className="flex flex-col items-center justify-center py-6 space-y-3">
-                            <div className="animate-spin">
-                              <Loader className="h-6 w-6 text-neutral-400" />
+                        {enrichLoading ? (
+                          <div className="space-y-6 min-h-[300px] flex flex-col items-center justify-center">
+                            {/* Simple code block style */}
+                            <div className="w-full bg-[#1a1a1a] border border-[#303030] rounded-md overflow-hidden">
+                              <div className="p-6 font-mono text-sm min-h-[100px]">
+                                {/* Render each line, typing one at a time, with cursor only on the current line */}
+                                {(() => {
+                                  const lines = loadingText.split('\n');
+                                  const totalLines = loadingSteps.length;
+                                  return loadingSteps.map((step, index) => {
+                                    const isCurrentTyping = (index === lines.length - 1);
+                                    const isFullyTyped = lines[index] === step;
+                                    // Only show lines that have started typing
+                                    if (index > lines.length - 1) return null;
+                                    return (
+                                      <div key={index} className={step.includes('Found') ? 'text-green-400 font-semibold' : 'text-neutral-300'}>
+                                        {lines[index]}
+                                        {isCurrentTyping && enrichLoading && (!isFullyTyped || (index === totalLines - 1 && isFullyTyped)) && (
+                                          <span className="inline-block h-4 w-2.5 bg-neutral-300 ml-0.5 animate-pulse"></span>
+                                        )}
+                                      </div>
+                                    );
+                                  });
+                                })()}
+                              </div>
                             </div>
-                            <p className="text-sm text-neutral-400">
-                              {showConfirmation ? "Downloading enriched data..." : "Finding matches..."}
-                            </p>
+                          </div>
+                        ) : matchingCount !== null && !showConfirmation && !enrichmentComplete && (
+                          // This block shows the static "Found X matches" after loading is done,
+                          // before confirmation. This is fine.
+                          <div className="space-y-6 min-h-[300px] flex flex-col items-center justify-center">
+                            <div className="w-full bg-[#1a1a1a] border border-[#303030] rounded-md overflow-hidden">
+                              <div className="p-6 font-mono text-sm">
+                                <div className="text-neutral-300 flex mb-1">
+                                  <div className="text-green-400 mr-3">{'>'}</div>
+                                  <div>Counting matches...</div>
+                                </div>
+                                <div className="text-neutral-300 flex">
+                                  <div className="text-green-400 mr-3">{'>'}</div>
+                                  <div className="text-green-400 font-semibold">• Found {matchingCount} matches</div>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         )}
                         
-                        {/* Confirmation dialog */}
-                        {showConfirmation && !enrichLoading && (
-                          <div className="bg-[#252525] border border-[#404040] rounded-md p-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <h3 className="font-medium">Enrichment Preview</h3>
+                        {/* Enrichment success screen */}
+                        {enrichmentComplete && !enrichLoading && (
+                          <div className="bg-[#252525] border border-[#404040] rounded-md p-4 space-y-4">
+                            <div className="flex items-center gap-3">
+                              <div className="h-8 w-8 rounded-full bg-green-900/30 border border-green-800/30 flex items-center justify-center">
+                                <CheckCircle className="h-4 w-4 text-green-400" />
+                              </div>
+                              <h3 className="font-medium text-white">Enrichment Complete!</h3>
                             </div>
+                            
                             <p className="text-sm text-neutral-300">
-                              Found <span className="text-green-400 font-medium">{matchingCount}</span> matching records across all databases.
+                              Successfully enriched <span className="text-green-400 font-medium">{enrichmentResult?.rowsEnriched || matchingCount}</span> contacts.
                             </p>
-                            <div className="bg-[#1f1f1f] border border-[#404040] rounded p-3">
-                              <p className="text-xs text-neutral-400 mb-2">
-                                <span className="text-green-400">✓</span> Contact data will be enriched with:
-                              </p>
-                              <ul className="text-xs text-neutral-300 space-y-1 pl-4">
-                                <li>• Email addresses</li>
-                                <li>• Phone numbers</li>
-                                <li>• Company information</li>
-                                <li>• Job titles & other details</li>
-                              </ul>
-                              <div className="mt-3 pt-2 border-t border-[#404040]">
-                                <p className="text-xs text-blue-400 flex items-center gap-1">
-                                  <DollarSign className="h-3 w-3" />
-                                  <span>This will cost <strong>{matchingCount}</strong> credits from your account.</span>
-                                </p>
+                            
+                            <div className="bg-[#303030] border border-[#404040] rounded-md p-3">
+                              <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-2">
+                                  <Table className="h-4 w-4 text-neutral-400" />
+                                  <span className="font-medium text-neutral-200 text-sm">{enrichmentResult?.exportName}</span>
+                                </div>
+                                
+                                <button
+                                  onClick={() => enrichmentResult?.exportId && handleDownloadExport(enrichmentResult.exportId)}
+                                  className="px-3 py-1.5 text-xs rounded-md bg-green-900/40 border border-green-800/30 text-green-400 hover:bg-green-900/60 transition-colors flex items-center gap-1.5"
+                                >
+                                  <Download className="h-3 w-3" />
+                                  <span>Download CSV</span>
+                                </button>
                               </div>
                             </div>
-                            <div className="bg-[#1f1f1f] border border-[#404040] rounded p-3">
-                              <p className="text-xs text-neutral-400">
-                                <span className="text-green-400">✓</span> The enriched file will be:
-                              </p>
-                              <ul className="text-xs text-neutral-300 space-y-1 pl-4 mt-1">
-                                <li>• Saved to your exports</li>
-                                <li>• Available for download anytime</li>
-                                <li>• Processed immediately</li>
-                              </ul>
+                            
+                            <div className="text-xs text-neutral-500 pt-2 border-t border-[#404040]">
+                              This export has been saved to your exports list for future reference.
+                            </div>
+                            
+                            <div className="flex justify-between pt-3">
+                              <button
+                                onClick={resetEnrichment}
+                                className="px-3 py-1.5 text-xs rounded-md bg-[#404040] hover:bg-[#4a4a4a] text-white transition-colors"
+                              >
+                                Enrich Another File
+                              </button>
+                              
+                              <button
+                                onClick={() => {
+                                  handleDrawerClose();
+                                  setExportsDrawerOpen(true);
+                                }}
+                                className="px-3 py-1.5 text-xs rounded-md bg-transparent border border-[#404040] text-neutral-300 hover:bg-[#353535] transition-colors flex items-center gap-1.5"
+                              >
+                                <Table className="h-3 w-3" />
+                                <span>View All Exports</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {showConfirmation && !enrichLoading && !enrichmentComplete && (
+                          <div className="bg-[#252525] border border-[#404040] rounded-md p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h3 className="font-medium">Confirm Enrichment</h3>
+                            </div>
+                            <p className="text-sm text-neutral-300">
+                              We'll enrich <span className="text-green-400 font-medium">{matchingCount}</span> contacts with emails, phone numbers, and more.
+                            </p>
+                            <div className="bg-[#1f1f1f] border border-[#404040] rounded p-3 flex items-center gap-2 text-sm">
+                              <DollarSign className="h-4 w-4 text-blue-400" />
+                              <span>This will cost <strong className="text-blue-400">{matchingCount}</strong> credits</span>
                             </div>
                             <div className="flex justify-end space-x-3 pt-2">
                               <button 
@@ -2683,7 +2866,7 @@ export default function Login() {
                                 className="px-3 py-1.5 text-xs rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors flex items-center gap-1"
                               >
                                 <CheckCircle className="h-3 w-3" />
-                                <span>Confirm and Process</span>
+                                <span>Confirm & Process</span>
                               </button>
                             </div>
                           </div>
@@ -2695,10 +2878,9 @@ export default function Login() {
                           </div>
                         )}
                         
-                        {!enrichLoading && !showConfirmation && (
+                        {!enrichLoading && !showConfirmation && !enrichmentComplete && (
                           <>
                             <div className="space-y-2">
-                              {/* Existing column selection code */}
                               {csvColumns.map((column) => {
                                 const isSelected = selectedColumns.includes(column.name);
                                 const samples = isSelected ? getColumnSamples(column.name) : [];
@@ -2710,8 +2892,8 @@ export default function Login() {
                                       className={`p-3 rounded-md border ${
                                         isSelected 
                                           ? 'bg-green-900/20 border-green-800 text-green-400' 
-                                          : 'bg-[#333333]/30 border-[#404040]/30 text-white/50'
-                                      } w-full flex justify-between items-center relative`}
+                                          : 'bg-[#333333]/30 border-[#404040]/30 text-white/50 hover:bg-[#333333]/50 hover:border-[#404040]/50' // Added hover style for non-selected
+                                      } w-full flex justify-between items-center relative transition-colors`}
                                     >
                                       <div className="flex flex-col items-start">
                                         <span>{column.name}</span>
@@ -2751,6 +2933,14 @@ export default function Login() {
                                 );
                               })}
                             </div>
+                            
+                            {matchingCount !== null && (
+                              <div className="mt-4 p-3 bg-green-900/20 border border-green-800/30 rounded-md">
+                                <p className="text-green-400 text-sm">
+                                  <span className="font-medium">{matchingCount}</span> matches found
+                                </p>
+                              </div>
+                            )}
                             
                             {/* Keep just the reset button below columns as subtext */}
                             <div className="mt-6 flex justify-end items-center">
@@ -2827,7 +3017,7 @@ export default function Login() {
                   </div>
 
                   {/* Fixed button at the bottom */}
-                  {csvData && uploadStep === 1 && !enrichLoading && !showConfirmation && (
+                  {csvData && uploadStep === 1 && !enrichLoading && !showConfirmation && !enrichmentComplete && (
                     <div className="absolute bottom-0 left-0 right-0 p-4 bg-[#2b2b2b] border-t border-[#404040] shadow-lg">
                       <button 
                         onClick={handleEnrichData}
@@ -2835,7 +3025,7 @@ export default function Login() {
                         className="w-full py-3 text-sm rounded-md bg-[#404040] hover:bg-[#4a4a4a] text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
                         <CheckCircle className="h-5 w-5" />
-                        <span>Confirm Column & Enrich</span>
+                        <span>Start Enrichment</span>
                       </button>
                     </div>
                   )}
@@ -3122,37 +3312,6 @@ export default function Login() {
               .thin-scrollbar {
                 scrollbar-width: thin;
                 scrollbar-color: rgba(90, 90, 90, 0.5) rgba(26, 26, 26, 0.1);
-              }
-              
-              /* Custom darker scrollbars for the table */
-              .custom-scrollbar::-webkit-scrollbar {
-                width: 5px;
-                height: 5px;
-              }
-              
-              .custom-scrollbar::-webkit-scrollbar-track {
-                background: rgba(20, 20, 20, 0.1);
-                border-radius: 3px;
-              }
-              
-              .custom-scrollbar::-webkit-scrollbar-thumb {
-                background: rgba(50, 50, 50, 0.6);
-                border-radius: 3px;
-                border: 1px solid rgba(40, 40, 40, 0.6);
-              }
-              
-              .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                background: rgba(60, 60, 60, 0.7);
-              }
-              
-              .custom-scrollbar::-webkit-scrollbar-corner {
-                background: rgba(20, 20, 20, 0.1);
-              }
-              
-              /* For Firefox */
-              .custom-scrollbar {
-                scrollbar-width: thin;
-                scrollbar-color: rgba(50, 50, 50, 0.6) rgba(20, 20, 20, 0.1);
               }
               
               ${tooltipStyles}
