@@ -331,7 +331,7 @@ function Navbar({ onCreditsClick, user, creditsRemaining, onUserClick, showUserD
           >
             <span className="text-white max-w-[200px] truncate">
               {user?.email || "User"}
-            </span>
+        </span>
             <ChevronDownIcon className="h-4 w-4 text-neutral-400" />
           </div>
           
@@ -3397,7 +3397,7 @@ export default function Login() {
                                           {isExtensionLoading ? (
                                             <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full mr-1"></div>
                                           ) : (
-                                            <Chrome className="h-4 w-4" />
+                                          <Chrome className="h-4 w-4" />
                                           )}
                                           <span>{isExtensionLoading ? "Downloading..." : "Extension"}</span>
                                         </button>
