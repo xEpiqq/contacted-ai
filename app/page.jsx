@@ -1227,6 +1227,9 @@ export default function Login() {
   const [isExtensionLoading, setIsExtensionLoading] = useState(false);
   const [showExtensionToast, setShowExtensionToast] = useState(false);
   
+  // Enrichment success toast
+  const [showEnrichmentToast, setShowEnrichmentToast] = useState(false);
+  
   // User dropdown state
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const userDropdownRef = useRef(null);
@@ -1970,12 +1973,13 @@ export default function Login() {
         .map(row => (row[selectedColumn] || "").trim())
         .filter(Boolean);
       
-      const response = await fetch("/api/enrich", {
+      const response = await fetch("/api/people/enrichment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           linkedin_urls: urls,
-          confirm: false
+          confirm: false,
+          table_name: "all" // Search across all databases
         })
       });
       
@@ -2004,7 +2008,14 @@ export default function Login() {
       const selectedColumn = selectedColumns[0];
       const headers = Object.keys(csvData[0] || {});
       
-      const response = await fetch("/api/enrich", {
+      // Get original filename for better export naming
+      let originalFilename = "";
+      if (fileInputRef.current && fileInputRef.current.files.length > 0) {
+        const file = fileInputRef.current.files[0];
+        originalFilename = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
+      }
+      
+      const response = await fetch("/api/people/enrichment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2012,7 +2023,8 @@ export default function Login() {
           csv_rows: csvData,
           csv_headers: headers,
           linkedinHeader: selectedColumn,
-          confirm: true
+          confirm: true,
+          table_name: "all" // Search across all databases
         })
       });
       
@@ -2021,21 +2033,23 @@ export default function Login() {
         throw new Error(errorData.error || "Failed to complete enrichment");
       }
       
-      // For CSV download, we need to create a blob from the response
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = `enriched_${Date.now()}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
+      const data = await response.json();
       
-      // Reset states after successful download
-      setShowConfirmation(false);
-      setMatchingCount(null);
-      
+      if (data.success) {
+        // Show success message
+        setUploadError("");
+        setShowConfirmation(false);
+        setMatchingCount(null);
+        
+        // Reset drawer state to prepare for next use
+        handleDrawerClose();
+        
+        // Show a success toast
+        setShowEnrichmentToast(true);
+        setTimeout(() => setShowEnrichmentToast(false), 5000);
+      } else {
+        throw new Error("Enrichment failed");
+      }
     } catch (error) {
       setUploadError(error.message);
     } finally {
@@ -2458,11 +2472,35 @@ export default function Login() {
                               <h3 className="font-medium">Enrichment Preview</h3>
                             </div>
                             <p className="text-sm text-neutral-300">
-                              Found <span className="text-green-400 font-medium">{matchingCount}</span> matching records.
+                              Found <span className="text-green-400 font-medium">{matchingCount}</span> matching records across all databases.
                             </p>
-                            <p className="text-xs text-neutral-400">
-                              This will cost {matchingCount} credits from your account.
-                            </p>
+                            <div className="bg-[#1f1f1f] border border-[#404040] rounded p-3">
+                              <p className="text-xs text-neutral-400 mb-2">
+                                <span className="text-green-400">✓</span> Contact data will be enriched with:
+                              </p>
+                              <ul className="text-xs text-neutral-300 space-y-1 pl-4">
+                                <li>• Email addresses</li>
+                                <li>• Phone numbers</li>
+                                <li>• Company information</li>
+                                <li>• Job titles & other details</li>
+                              </ul>
+                              <div className="mt-3 pt-2 border-t border-[#404040]">
+                                <p className="text-xs text-blue-400 flex items-center gap-1">
+                                  <DollarSign className="h-3 w-3" />
+                                  <span>This will cost <strong>{matchingCount}</strong> credits from your account.</span>
+                                </p>
+                              </div>
+                            </div>
+                            <div className="bg-[#1f1f1f] border border-[#404040] rounded p-3">
+                              <p className="text-xs text-neutral-400">
+                                <span className="text-green-400">✓</span> The enriched file will be:
+                              </p>
+                              <ul className="text-xs text-neutral-300 space-y-1 pl-4 mt-1">
+                                <li>• Saved to your exports</li>
+                                <li>• Available for download anytime</li>
+                                <li>• Processed immediately</li>
+                              </ul>
+                            </div>
                             <div className="flex justify-end space-x-3 pt-2">
                               <button 
                                 onClick={() => setShowConfirmation(false)}
@@ -2472,10 +2510,10 @@ export default function Login() {
                               </button>
                               <button 
                                 onClick={handleConfirmEnrich}
-                                className="px-3 py-1.5 text-xs rounded-md bg-white text-black hover:bg-neutral-200 transition-colors flex items-center gap-1"
+                                className="px-3 py-1.5 text-xs rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors flex items-center gap-1"
                               >
-                                <Download className="h-3 w-3" />
-                                <span>Download Enriched CSV</span>
+                                <CheckCircle className="h-3 w-3" />
+                                <span>Confirm and Process</span>
                               </button>
                             </div>
                           </div>
@@ -3737,6 +3775,31 @@ export default function Login() {
             <button 
               onClick={() => setShowExtensionToast(false)}
               className="ml-2 text-green-300 hover:text-white"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Toast notification for enrichment success */}
+      <AnimatePresence>
+        {showEnrichmentToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            transition={{ duration: 0.3 }}
+            className="fixed bottom-5 right-5 bg-blue-900/80 border border-blue-700 text-blue-100 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50"
+          >
+            <CheckCircle className="h-5 w-5 text-blue-400" />
+            <div>
+              <p className="font-medium">Enrichment Completed Successfully</p>
+              <p className="text-xs text-blue-300 mt-0.5">Your enriched data has been saved to your exports</p>
+            </div>
+            <button 
+              onClick={() => setShowEnrichmentToast(false)}
+              className="ml-2 text-blue-300 hover:text-white"
             >
               <XMarkIcon className="h-5 w-5" />
             </button>
