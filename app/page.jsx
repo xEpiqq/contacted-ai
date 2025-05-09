@@ -1188,14 +1188,12 @@ export default function Login() {
   const [newExportName, setNewExportName] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
   
-  // Dummy exports data
-  const [exports, setExports] = useState([
-    { id: 1, name: "LinkedinContacts_Q2", date: "Jun 12, 2023", size: "2.4 MB", rows: 5239 },
-    { id: 2, name: "SalesLeads_May", date: "May 28, 2023", size: "1.1 MB", rows: 2381 },
-    { id: 3, name: "TechCompanies", date: "Apr 15, 2023", size: "3.7 MB", rows: 8042 },
-    { id: 4, name: "MarketingDirectors", date: "Mar 22, 2023", size: "952 KB", rows: 1840 },
-    { id: 5, name: "Enriched_1686512398", date: "Today", size: "450 KB", rows: 842 }
-  ]);
+  // Replace dummy exports data with state for actual exports
+  const [exports, setExports] = useState([]);
+  const [exportsLoading, setExportsLoading] = useState(false);
+  const [exportsError, setExportsError] = useState("");
+  const [downloadInProgress, setDownloadInProgress] = useState(false);
+  const [exportsFetched, setExportsFetched] = useState(false); // Track if exports have been fetched
 
   const textareaRef = useRef(null);
   
@@ -2024,7 +2022,8 @@ export default function Login() {
           csv_headers: headers,
           linkedinHeader: selectedColumn,
           confirm: true,
-          table_name: "all" // Search across all databases
+          table_name: "all", // Search across all databases
+          original_filename: originalFilename // Pass the original filename to the API
         })
       });
       
@@ -2044,9 +2043,12 @@ export default function Login() {
         // Reset drawer state to prepare for next use
         handleDrawerClose();
         
-        // Show a success toast
-        setShowEnrichmentToast(true);
-        setTimeout(() => setShowEnrichmentToast(false), 5000);
+        // Refresh the exports list
+        setExportsFetched(false); // Force a refetch of exports
+        fetchExports(); // Immediately fetch the updated exports
+        
+        // Show a success toast or message
+        alert("Enrichment completed successfully! The enriched data has been saved to your exports.");
       } else {
         throw new Error("Enrichment failed");
       }
@@ -2100,27 +2102,112 @@ export default function Login() {
     }
   };
   
-  const confirmRename = () => {
-    if (newExportName.trim()) {
+  const confirmRename = async () => {
+    if (!newExportName.trim()) return;
+    
+    // Store the original name for rollback if needed
+    const originalName = exports.find(e => e.id === activeExport)?.name || '';
+    
+    // Optimistic update - update the UI immediately
+    setExports(exports.map(exp => 
+      exp.id === activeExport 
+        ? { ...exp, name: newExportName.trim() } 
+        : exp
+    ));
+    
+    // Reset the renaming state
+    setIsRenaming(false);
+    setNewExportName("");
+    
+    // Perform the actual API call in the background
+    try {
+      const response = await fetch(`/api/people/saved-exports/${activeExport}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ name: newExportName.trim() })
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to rename export");
+      }
+    } catch (error) {
+      console.error("Error renaming export:", error);
+      
+      // Rollback optimistic update on error
       setExports(exports.map(exp => 
         exp.id === activeExport 
-          ? {...exp, name: newExportName.trim()} 
+          ? { ...exp, name: originalName } 
           : exp
       ));
-      setIsRenaming(false);
-      setNewExportName("");
+      
+      alert("Failed to rename export. Please try again.");
     }
   };
 
-  const confirmDelete = () => {
-    if (pendingDeleteId) {
-      setExports(exports.filter(exp => exp.id !== pendingDeleteId));
-      setPendingDeleteId(null);
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    
+    // Store the export being deleted for rollback if needed
+    const deletedExport = exports.find(e => e.id === pendingDeleteId);
+    
+    // Optimistic update - remove from UI immediately
+    setExports(exports.filter(exp => exp.id !== pendingDeleteId));
+    setPendingDeleteId(null);
+    
+    // Perform the actual API call in the background
+    try {
+      const response = await fetch(`/api/people/saved-exports/${pendingDeleteId}`, {
+        method: "DELETE"
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to delete export");
+      }
+    } catch (error) {
+      console.error("Error deleting export:", error);
+      
+      // Rollback optimistic update on error
+      if (deletedExport) {
+        setExports(prev => [...prev, deletedExport].sort((a, b) => 
+          new Date(b.created_at) - new Date(a.created_at)
+        ));
+      }
+      
+      alert("Failed to delete export. Please try again.");
     }
   };
-  
+
   const cancelDelete = () => {
     setPendingDeleteId(null);
+  };
+
+  const handleDownloadExport = async (id) => {
+    if (downloadInProgress) return;
+    
+    setDownloadInProgress(true);
+    
+    try {
+      // First check if storage_path exists
+      const export_item = exports.find(e => e.id === id);
+      
+      if (export_item?.storage_path) {
+        // Direct download from storage
+        window.location.href = `/api/people/saved-exports/${id}/legit-download`;
+      } else {
+        // Use the regenerating route
+        window.location.href = `/api/people/saved-exports/${id}/download`;
+      }
+    } catch (error) {
+      console.error("Error downloading export:", error);
+      alert("Failed to download export. Please try again.");
+    } finally {
+      // Add a short delay before resetting to avoid multiple clicks
+      setTimeout(() => {
+        setDownloadInProgress(false);
+      }, 1000);
+    }
   };
 
   /* ---------- Manual Search Helpers ---------- */
@@ -2289,6 +2376,89 @@ export default function Login() {
     setShowSuggestions(false);
     setSuggestion("");
     setSuggestActive(false);
+  };
+
+  // Prefetch exports data when component mounts
+  useEffect(() => {
+    // Only fetch if not already fetched
+    if (!exportsFetched && user) {
+      fetchExports();
+    }
+  }, [exportsFetched, user]);
+
+  // Function to fetch exports from the backend
+  const fetchExports = async () => {
+    setExportsLoading(true);
+    setExportsError("");
+    
+    try {
+      const response = await fetch("/api/people/saved-exports");
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch exports");
+      }
+      
+      const data = await response.json();
+      
+      if (data.exports) {
+        // Format the date for display
+        const formattedExports = data.exports.map(exp => ({
+          ...exp,
+          displayDate: formatExportDate(exp.created_at),
+          displaySize: formatFileSize(exp.row_count * 200) // Estimate file size based on rows
+        }));
+        
+        setExports(formattedExports);
+        setExportsFetched(true); // Mark as fetched
+      } else {
+        setExports([]);
+      }
+    } catch (error) {
+      console.error("Error fetching exports:", error);
+      setExportsError("Failed to load your exports. Please try again.");
+    } finally {
+      setExportsLoading(false);
+    }
+  };
+
+  // Helper function to format date for display
+  const formatExportDate = (dateString) => {
+    if (!dateString) return "Unknown date";
+    
+    const date = new Date(dateString);
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    // Check if date is today
+    if (date.toDateString() === now.toDateString()) {
+      return "Today";
+    }
+    
+    // Check if date is yesterday
+    if (date.toDateString() === yesterday.toDateString()) {
+      return "Yesterday";
+    }
+    
+    // Otherwise return MMM DD, YYYY format
+    return date.toLocaleString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
+  };
+
+  // Helper function to format file size for display
+  const formatFileSize = (bytes) => {
+    if (!bytes || isNaN(bytes)) return "Unknown";
+    
+    const kb = bytes / 1024;
+    if (kb < 1024) {
+      return `${Math.round(kb)} KB`;
+    }
+    
+    const mb = kb / 1024;
+    return `${mb.toFixed(1)} MB`;
   };
 
   /*────────────────────────────  RENDER  ─────────────────────────*/
@@ -2686,138 +2856,193 @@ export default function Login() {
                 >
                   <div className="flex justify-between items-center border-b border-[#404040] p-4">
                     <h2 className="text-base font-semibold">Your Exports</h2>
-                    <button
-                      aria-label="close drawer"
-                      onClick={() => {
-                        setExportsDrawerOpen(false);
-                        setPendingDeleteId(null);
-                      }}
-                      className="flex h-6 w-6 items-center justify-center rounded-full bg-[#3a3a3a] text-neutral-400 hover:text-white"
-                    >
-                      <XMarkIcon className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        aria-label="refresh exports"
+                        onClick={fetchExports}
+                        className="flex h-6 w-6 items-center justify-center rounded-full bg-[#3a3a3a] text-neutral-400 hover:text-white"
+                        disabled={exportsLoading}
+                      >
+                        {exportsLoading ? (
+                          <div className="h-3 w-3 border-2 border-t-white border-white/20 rounded-full animate-spin"></div>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 2v6h-6"></path>
+                            <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+                            <path d="M3 22v-6h6"></path>
+                            <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+                          </svg>
+                        )}
+                      </button>
+                      <button
+                        aria-label="close drawer"
+                        onClick={() => {
+                          setExportsDrawerOpen(false);
+                          setPendingDeleteId(null);
+                          setShowExportOptions(false);
+                          setIsRenaming(false);
+                        }}
+                        className="flex h-6 w-6 items-center justify-center rounded-full bg-[#3a3a3a] text-neutral-400 hover:text-white"
+                      >
+                        <XMarkIcon className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                   
                   <div className="p-4 space-y-4 flex-1 overflow-y-auto thin-scrollbar">
+                    {/* Loading state */}
+                    {exportsLoading && (
+                      <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                        <div className="animate-spin">
+                          <Loader className="h-6 w-6 text-neutral-400" />
+                        </div>
+                        <p className="text-neutral-500">Loading your exports...</p>
+                      </div>
+                    )}
+                    
+                    {/* Error state */}
+                    {exportsError && !exportsLoading && (
+                      <div className="bg-red-900/20 border border-red-800/30 rounded-md p-4 text-red-400 flex items-center gap-3">
+                        <div className="h-6 w-6 rounded-full bg-red-900/30 flex items-center justify-center text-red-400">!</div>
+                        <div>
+                          <p>{exportsError}</p>
+                          <button 
+                            onClick={fetchExports}
+                            className="text-xs underline hover:no-underline mt-1"
+                          >
+                            Try again
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    
                     {/* Exports list */}
-                    <div className="space-y-2">
-                      {exports.map((exp) => (
-                        <div 
-                          key={exp.id} 
-                          className={`bg-[#333333] rounded-md overflow-hidden ${activeExport === exp.id && showExportOptions ? '' : ''}`}
-                        >
-                          <div className="p-3 flex justify-between items-center">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <Table className="h-4 w-4 text-neutral-400" />
-                                <span className="font-medium">{exp.name}</span>
+                    {!exportsLoading && !exportsError && (
+                      <div className="space-y-2">
+                        {exports.map((exp) => (
+                          <div 
+                            key={exp.id} 
+                            className={`bg-[#333333] rounded-md overflow-hidden ${activeExport === exp.id && showExportOptions ? '' : ''}`}
+                          >
+                            <div className="p-3 flex justify-between items-center">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <Table className="h-4 w-4 text-neutral-400" />
+                                  <span className="font-medium">{exp.name}</span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-1 text-xs text-neutral-500">
+                                  <span>{exp.displayDate}</span>
+                                  <span>•</span>
+                                  <span>{exp.displaySize}</span>
+                                  <span>•</span>
+                                  <span>{exp.row_count?.toLocaleString() || 0} rows</span>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2 mt-1 text-xs text-neutral-500">
-                                <span>{exp.date}</span>
-                                <span>•</span>
-                                <span>{exp.size}</span>
-                                <span>•</span>
-                                <span>{exp.rows.toLocaleString()} rows</span>
+                              
+                              <div className="flex items-center gap-1">
+                                <button
+                                  aria-label="download export"
+                                  className={`p-1.5 rounded-md hover:bg-[#4a4a4a] text-green-500 hover:text-green-400 transition-colors ${downloadInProgress ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                  onClick={() => handleDownloadExport(exp.id)}
+                                  disabled={downloadInProgress}
+                                >
+                                  {downloadInProgress ? (
+                                    <div className="h-4 w-4 border-2 border-t-green-500 border-green-200 rounded-full animate-spin"></div>
+                                  ) : (
+                                    <Download className="h-4 w-4" />
+                                  )}
+                                </button>
+                                <button
+                                  aria-label="export options"
+                                  onClick={() => {
+                                    if (activeExport === exp.id && (showExportOptions || isRenaming)) {
+                                      // If already open, close it and reset
+                                      setShowExportOptions(false);
+                                      setIsRenaming(false);
+                                      setNewExportName("");
+                                    } else {
+                                      // Otherwise open it
+                                      setActiveExport(exp.id);
+                                      setShowExportOptions(true);
+                                    }
+                                  }}
+                                  className="p-1.5 rounded-md text-neutral-400 hover:text-white hover:bg-[#3a3a3a]/40 transition-all"
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </button>
                               </div>
                             </div>
                             
-                            <div className="flex items-center gap-1">
-                              <button
-                                aria-label="download export"
-                                className="p-1.5 rounded-md hover:bg-[#4a4a4a] text-green-500 hover:text-green-400 transition-colors"
-                              >
-                                <Download className="h-4 w-4" />
-                              </button>
-                              <button
-                                aria-label="export options"
-                                onClick={() => {
-                                  if (activeExport === exp.id && (showExportOptions || isRenaming)) {
-                                    // If already open, close it and reset
-                                    setShowExportOptions(false);
-                                    setIsRenaming(false);
-                                    setNewExportName("");
-                                  } else {
-                                    // Otherwise open it
-                                    setActiveExport(exp.id);
-                                    setShowExportOptions(true);
-                                  }
-                                }}
-                                className="p-1.5 rounded-md text-neutral-400 hover:text-white hover:bg-[#3a3a3a]/40 transition-all"
-                              >
-                                <MoreHorizontal className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                          
-                          {/* Export options dropdown */}
-                          {activeExport === exp.id && showExportOptions && !isRenaming && (
-                            <div className="bg-[#252525] border-t border-[#404040] p-1.5">
-                              <div className="flex flex-col divide-y divide-[#404040]">
-                                <button
-                                  onClick={() => handleRenameExport(exp.id)}
-                                  className="py-1.5 px-1 flex items-center gap-1.5 text-xs hover:text-white text-neutral-300"
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                  <span>Rename</span>
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteExport(exp.id)}
-                                  className="py-1.5 px-1 flex items-center gap-1.5 text-xs hover:text-red-400 text-neutral-300"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                  <span>Delete</span>
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* Rename form */}
-                          {activeExport === exp.id && isRenaming && (
-                            <div className="bg-[#252525] border-t border-[#404040] p-1.5">
-                              <form onSubmit={(e) => {
-                                e.preventDefault();
-                                confirmRename();
-                              }}>
-                                <input
-                                  type="text"
-                                  value={newExportName}
-                                  onChange={(e) => setNewExportName(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Escape') {
-                                      setIsRenaming(false);
-                                      setNewExportName("");
-                                    }
-                                  }}
-                                  onFocus={(e) => e.target.select()}
-                                  autoFocus
-                                  className="w-full bg-transparent py-1.5 px-1 text-xs text-neutral-300 focus:outline-none"
-                                />
-                                <div className="flex justify-end gap-2 mt-2">
+                            {/* Export options dropdown */}
+                            {activeExport === exp.id && showExportOptions && !isRenaming && (
+                              <div className="bg-[#252525] border-t border-[#404040] p-1.5">
+                                <div className="flex flex-col divide-y divide-[#404040]">
                                   <button
-                                    type="button"
-                                    onClick={() => {
-                                      setIsRenaming(false);
-                                      setNewExportName("");
-                                    }}
-                                    className="px-2 py-1 text-xs text-neutral-400 hover:text-white"
+                                    onClick={() => handleRenameExport(exp.id)}
+                                    className="py-1.5 px-1 flex items-center gap-1.5 text-xs hover:text-white text-neutral-300"
                                   >
-                                    Cancel
+                                    <Pencil className="h-3 w-3" />
+                                    <span>Rename</span>
                                   </button>
                                   <button
-                                    type="submit"
-                                    className="px-2 py-1 text-xs bg-neutral-600 hover:bg-neutral-500 rounded text-white"
+                                    onClick={() => handleDeleteExport(exp.id)}
+                                    className="py-1.5 px-1 flex items-center gap-1.5 text-xs hover:text-red-400 text-neutral-300"
                                   >
-                                    Save
+                                    <Trash2 className="h-3 w-3" />
+                                    <span>Delete</span>
                                   </button>
                                 </div>
-                              </form>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                              </div>
+                            )}
+                            
+                            {/* Rename form */}
+                            {activeExport === exp.id && isRenaming && (
+                              <div className="bg-[#252525] border-t border-[#404040] p-1.5">
+                                <form onSubmit={(e) => {
+                                  e.preventDefault();
+                                  confirmRename();
+                                }}>
+                                  <input
+                                    type="text"
+                                    value={newExportName}
+                                    onChange={(e) => setNewExportName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Escape') {
+                                        setIsRenaming(false);
+                                        setNewExportName("");
+                                      }
+                                    }}
+                                    onFocus={(e) => e.target.select()}
+                                    autoFocus
+                                    className="w-full bg-transparent py-1.5 px-1 text-xs text-neutral-300 focus:outline-none"
+                                  />
+                                  <div className="flex justify-end gap-2 mt-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setIsRenaming(false);
+                                        setNewExportName("");
+                                      }}
+                                      className="px-2 py-1 text-xs text-neutral-400 hover:text-white"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="submit"
+                                      className="px-2 py-1 text-xs bg-neutral-600 hover:bg-neutral-500 rounded text-white"
+                                    >
+                                      Save
+                                    </button>
+                                  </div>
+                                </form>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     
-                    {exports.length === 0 && (
+                    {!exportsLoading && !exportsError && exports.length === 0 && (
                       <div className="flex flex-col items-center justify-center py-10 space-y-3 text-neutral-500">
                         <Table className="h-10 w-10 opacity-50" />
                         <p>No exports found</p>
@@ -3775,31 +4000,6 @@ export default function Login() {
             <button 
               onClick={() => setShowExtensionToast(false)}
               className="ml-2 text-green-300 hover:text-white"
-            >
-              <XMarkIcon className="h-5 w-5" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Toast notification for enrichment success */}
-      <AnimatePresence>
-        {showEnrichmentToast && (
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            transition={{ duration: 0.3 }}
-            className="fixed bottom-5 right-5 bg-blue-900/80 border border-blue-700 text-blue-100 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50"
-          >
-            <CheckCircle className="h-5 w-5 text-blue-400" />
-            <div>
-              <p className="font-medium">Enrichment Completed Successfully</p>
-              <p className="text-xs text-blue-300 mt-0.5">Your enriched data has been saved to your exports</p>
-            </div>
-            <button 
-              onClick={() => setShowEnrichmentToast(false)}
-              className="ml-2 text-blue-300 hover:text-white"
             >
               <XMarkIcon className="h-5 w-5" />
             </button>

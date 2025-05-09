@@ -296,6 +296,9 @@ export async function POST(request) {
       );
     }
 
+    // Extract the original filename if provided in the request
+    const original_filename = request.body.original_filename;
+
     // 8) Deduct tokens from subscription first, then from one-time credits
     let newTokensUsed = subscriptionUsed;
     let newOneTimeUsed = oneTimeUsed;
@@ -307,6 +310,11 @@ export async function POST(request) {
       newTokensUsed += subscriptionLeft;
       newOneTimeUsed += remainder;
     }
+
+    // Create a proper export name
+    const exportName = original_filename
+      ? `${original_filename} (Enriched)`
+      : `Enriched Data - ${new Date().toISOString().slice(0, 10)}`;
 
     // NEW CODE: If we've used exactly all the one-time credits, reset both to 0
     if (newOneTimeUsed === oneTime) {
@@ -338,8 +346,9 @@ export async function POST(request) {
         },
         columns: allCols,
         row_count: finalDocs.length,
-        name: `Enrichment_${table_name}_${new Date().toLocaleString()}`,
+        name: exportName,
         storage_path: uploadData.path,
+        created_at: new Date().toISOString(), // Explicitly set created_at timestamp
       });
 
       if (insertErr) {
@@ -373,8 +382,9 @@ export async function POST(request) {
         },
         columns: allCols,
         row_count: finalDocs.length,
-        name: `Enrichment_${table_name}_${new Date().toLocaleString()}`,
+        name: exportName,
         storage_path: uploadData.path,
+        created_at: new Date().toISOString(), // Explicitly set created_at timestamp
       });
 
       if (insertErr) {
