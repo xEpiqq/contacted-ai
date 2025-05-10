@@ -1,0 +1,847 @@
+"use client";
+
+import React, { useRef, useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { XMarkIcon, ChevronLeftIcon } from "@heroicons/react/24/outline";
+import { 
+  FileUp, 
+  Upload, 
+  CheckCircle, 
+  CirclePlus, 
+  Loader, 
+  Download
+} from "lucide-react";
+import Papa from "papaparse";
+import { useSearchContext } from "../context/SearchContext";
+
+const EnrichmentDrawer = () => {
+  // Refs
+  const fileInputRef = useRef(null);
+  
+  // State from context
+  const {
+    drawerOpen,
+    setDrawerOpen,
+    setShowEnrichmentSuccessToast
+  } = useSearchContext();
+  
+  // Local state
+  const [uploadStep, setUploadStep] = useState(0); // 0: upload, 1: columns, 2: settings
+  const [csvData, setCsvData] = useState(null);
+  const [csvColumns, setCsvColumns] = useState([]);
+  const [selectedColumns, setSelectedColumns] = useState([]);
+  const [autoDetectedColumn, setAutoDetectedColumn] = useState(null);
+  const [uploadError, setUploadError] = useState("");
+  const [enrichLoading, setEnrichLoading] = useState(false);
+  const [matchingCount, setMatchingCount] = useState(null);
+  const [matchingResult, setMatchingResult] = useState(null); // Store full result from API
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [enrichmentComplete, setEnrichmentComplete] = useState(false);
+  const [enrichmentResult, setEnrichmentResult] = useState(null);
+  const [enrichButtonProcessing, setEnrichButtonProcessing] = useState(false);
+  const [loadingText, setLoadingText] = useState("");
+  const [loadingSteps, setLoadingSteps] = useState([]);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [downloadInProgress, setDownloadInProgress] = useState(false);
+  
+  // Close the drawer and reset all states
+  const handleDrawerClose = () => {
+    setDrawerOpen(false);
+    resetEnrichment();
+  };
+  
+  // Reset upload state
+  const resetUpload = () => {
+    setCsvData(null);
+    setCsvColumns([]);
+    setSelectedColumns([]);
+    setAutoDetectedColumn(null);
+    setUploadStep(0);
+    setUploadError("");
+  };
+  
+  // Reset the entire enrichment process
+  const resetEnrichment = () => {
+    resetUpload();
+    setEnrichmentComplete(false);
+    setEnrichmentResult(null);
+    setMatchingCount(null);
+    setShowConfirmation(false);
+    setEnrichButtonProcessing(false);
+    setLoadingSteps([]);
+    setLoadingText("");
+  };
+  
+  // Handle file upload and parsing
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    setUploadError("");
+    
+    if (file) {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+          if (results.data && results.data.length > 0) {
+            setCsvData(results.data);
+            
+            // Get columns and analyze them for LinkedIn URLs
+            const fields = results.meta.fields || [];
+            const analyzedColumns = analyzeColumnsForLinkedIn(fields, results.data);
+            setCsvColumns(analyzedColumns);
+            
+            // Automatically select the highest-scoring column
+            if (analyzedColumns.length > 0) {
+              setSelectedColumns([analyzedColumns[0].name]);
+              setAutoDetectedColumn(analyzedColumns[0].name); // Mark as auto-detected
+            }
+            
+            setUploadStep(1);
+          } else {
+            setUploadError("No data found in the CSV file.");
+          }
+        },
+        error: function(error) {
+          setUploadError(`Error parsing CSV: ${error.message}`);
+        }
+      });
+    }
+  };
+  
+  // Analyze columns to find those likely containing LinkedIn URLs
+  const analyzeColumnsForLinkedIn = (columns, data) => {
+    return columns.map(column => {
+      // Take a sample of up to 20 rows to analyze
+      const sampleSize = Math.min(20, data.length);
+      const sample = data.slice(0, sampleSize);
+      
+      // Count occurrences of "linkedin" in this column
+      let linkedinCount = 0;
+      let hasUrl = false;
+      
+      sample.forEach(row => {
+        const value = String(row[column] || '').toLowerCase();
+        if (value.includes('linkedin')) {
+          linkedinCount++;
+        }
+        if (value.includes('http') || value.includes('www.')) {
+          hasUrl = true;
+        }
+      });
+      
+      // Calculate a score based on occurrences and whether it looks like a URL column
+      // Higher score = more likely to be a LinkedIn URL column
+      const score = linkedinCount * 10 + (hasUrl ? 5 : 0);
+      
+      // Check if column name itself suggests LinkedIn
+      const nameScore = column.toLowerCase().includes('linkedin') ? 50 : 
+                        column.toLowerCase().includes('url') || 
+                        column.toLowerCase().includes('link') ? 10 : 0;
+      
+      return {
+        name: column,
+        score: score + nameScore,
+        isLikely: (score + nameScore) > 0
+      };
+    }).sort((a, b) => b.score - a.score); // Sort by score descending
+  };
+  
+  // Handle column selection
+  const handleColumnSelect = (column) => {
+    // If user is selecting a different column, clear the autoDetected status
+    if (!selectedColumns.includes(column)) {
+      setAutoDetectedColumn(null);
+    }
+    // Replace selection with the new column (only one at a time)
+    setSelectedColumns([column]);
+  };
+  
+  // Get sample data from selected column
+  const getColumnSamples = (columnName) => {
+    if (!csvData || !columnName) return [];
+    
+    // Get up to 3 non-empty samples
+    return csvData
+      .filter(row => row[columnName] && String(row[columnName]).trim() !== '')
+      .slice(0, 3)
+      .map(row => row[columnName]);
+  };
+  
+  // Handle enrichment preview
+  const handleEnrichData = async () => {
+    if (selectedColumns.length === 0) return;
+    
+    setEnrichLoading(true);
+    setMatchingCount(null);
+    setLoadingSteps(['Counting matches...']); // Use ellipsis directly in the step text
+    
+    try {
+      const selectedColumn = selectedColumns[0];
+      const urls = csvData.map(row => (row[selectedColumn] || "").trim()).filter(Boolean);
+      
+      try {
+        // Real API call to check matches without actually enriching
+        const response = await fetch("/api/people/enrichment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            linkedin_urls: urls, 
+            confirm: false, 
+            table_name: "all" 
+          })
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to preview enrichment");
+        }
+        
+        const data = await response.json();
+        const matchCount = data.matchingCount || 0;
+        
+        setMatchingCount(matchCount);
+        setMatchingResult(data); // Store full result for later use
+
+        if (matchCount > 0) {
+          console.log("Found matches:", matchCount, "- proceeding with enrichment");
+          // Update the steps without adding "done"
+          setTimeout(() => {
+            const stepsBeforeConfirm = ['Counting matches...', `• Found ${matchCount} matches`, 'Enriching data...'];
+            setLoadingSteps(stepsBeforeConfirm);
+            
+            // Start actual enrichment process
+            processEnrichData(urls, selectedColumn, matchCount, stepsBeforeConfirm);
+          }, 1000);
+        } else {
+          setTimeout(() => {
+            setLoadingSteps(['Counting matches...', '• No matches found to enrich.']);
+            setEnrichLoading(false);
+          }, 1000);
+        }
+      } catch (error) {
+        console.error("API error:", error);
+        setUploadError("Error connecting to enrichment service: " + error.message);
+        setLoadingSteps(['Counting matches...', '• Error in enrichment preview']);
+        setEnrichLoading(false);
+      }
+    } catch (error) {
+      setUploadError(error.message);
+      setLoadingSteps(['Counting matches...', '• Error in enrichment preview']);
+      setEnrichLoading(false);
+    }
+  };
+  
+  // Process and enrich the data after matches are found
+  const processEnrichData = async (urls, selectedColumn, matchCount, prevSteps) => {
+    try {
+      // Get original file name if available
+      let filename = "enriched_contacts";
+      if (fileInputRef.current && fileInputRef.current.files.length > 0) {
+        const file = fileInputRef.current.files[0];
+        filename = file.name.replace(/\.[^/.]+$/, "");
+      }
+      
+      // Prepare data for enrichment
+      const headers = Object.keys(csvData[0] || {});
+      
+      const response = await fetch("/api/people/enrichment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          linkedin_urls: urls,
+          csv_rows: csvData,
+          csv_headers: headers,
+          linkedinHeader: selectedColumn,
+          prepare_export: true, // Prepare export but don't save yet
+          confirm: false, // Not confirming/saving yet
+          table_name: "all",
+          original_filename: filename,
+          row_count: matchCount
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to process enrichment");
+      }
+      
+      const data = await response.json();
+      
+      // Store enrichment result for later download
+      setEnrichmentResult({
+        rowsEnriched: data.row_count || matchCount,
+        exportId: data.export_id || null,
+        exportName: data.exportName || `${filename} (Enriched)`,
+        storage_path: data.storage_path || null,
+        allCols: data.allCols || headers
+      });
+      
+      // Mark enrichment as complete and update UI
+      setLoadingSteps([...prevSteps, '• Complete']);
+      setEnrichmentComplete(true);
+      setEnrichLoading(false);
+      
+    } catch (error) {
+      console.error("Enrichment processing error:", error);
+      setUploadError("Error during enrichment: " + error.message);
+      setLoadingSteps([...prevSteps, '• Error during enrichment']);
+      setEnrichLoading(false);
+    }
+  };
+  
+  // Confirm enrichment and download - final step that deducts credits
+  const handleConfirmEnrich = async () => {
+    if (!matchingCount || !enrichmentResult || !enrichmentComplete) return;
+    
+    setEnrichButtonProcessing(true);
+    setDownloadInProgress(true);
+    
+    try {
+      const selectedColumn = selectedColumns[0];
+      const urls = csvData.map(row => (row[selectedColumn] || "").trim()).filter(Boolean);
+      
+      // Make final API call to confirm enrichment, save to exports, and deduct credits
+      const response = await fetch("/api/people/enrichment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          finalize: true, // This triggers credit deduction and final save
+          storage_path: enrichmentResult.storage_path,
+          exportName: enrichmentResult.exportName,
+          row_count: matchingCount, // Credits to deduct
+          allCols: enrichmentResult.allCols,
+          table_name: "all",
+          linkedin_urls: urls
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to finalize enrichment");
+      }
+      
+      const data = await response.json();
+      
+      // At this point, credits were deducted and export was saved
+      console.log("Enrichment confirmed and credits deducted:", data);
+      
+      // Download the file using a direct blob approach
+      try {
+        // If we have an export_id, use that to download the file
+        if (data.export_id) {
+          const downloadResponse = await fetch(`/api/people/saved-exports/${data.export_id}/legit-download`);
+          
+          if (!downloadResponse.ok) {
+            throw new Error(`Download failed with status: ${downloadResponse.status}`);
+          }
+          
+          // Get the file content as blob
+          const blob = await downloadResponse.blob();
+          
+          // Create a temporary link element and trigger the download
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = enrichmentResult.exportName ? `${enrichmentResult.exportName}.csv` : 'enriched-data.csv';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        } 
+        // Fallback to using storage_path
+        else if (enrichmentResult.storage_path) {
+          const downloadResponse = await fetch(`/api/people/saved-exports/download-path`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              storage_path: enrichmentResult.storage_path
+            })
+          });
+          
+          if (!downloadResponse.ok) {
+            throw new Error("Failed to download enriched file");
+          }
+          
+          const blob = await downloadResponse.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${enrichmentResult.exportName || 'enriched'}.csv`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        } else {
+          throw new Error("No download path available");
+        }
+
+        // Show toast notification before closing drawer
+        if (setShowEnrichmentSuccessToast) {
+          setShowEnrichmentSuccessToast(true);
+          setTimeout(() => setShowEnrichmentSuccessToast(false), 5000);
+        }
+        
+        // Close drawer after short delay
+        setTimeout(() => {
+          handleDrawerClose();
+        }, 500);
+      } catch (downloadError) {
+        console.error("Error downloading file:", downloadError);
+        setUploadError("Export saved but download failed. Please check your exports.");
+        setDownloadInProgress(false);
+      }
+    } catch (error) {
+      console.error("Error finalizing enrichment:", error);
+      setUploadError("Error finalizing enrichment: " + error.message);
+      setDownloadInProgress(false);
+    } finally {
+      setEnrichButtonProcessing(false);
+    }
+  };
+  
+  // Render download button with loading state
+  const renderDownloadButton = () => {
+    return !downloadInProgress ? (
+      <div className="flex flex-col items-center">
+        <button
+          onClick={handleConfirmEnrich}
+          className="w-full py-3 px-5 text-sm rounded-md bg-[#404040] hover:bg-[#4a4a4a] text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          disabled={!enrichmentComplete}
+        >
+          <Download className="h-5 w-5 mr-2" />
+          <span>Confirm & Download</span>
+        </button>
+        {enrichmentComplete && matchingCount > 0 && (
+          <span className="text-xs text-neutral-400 mt-1.5">
+            This will use {matchingCount} credit{matchingCount !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+    ) : (
+      <button
+        disabled
+        className="w-full py-3 px-5 text-sm rounded-md bg-[#404040] text-white/70 disabled:opacity-70 flex items-center justify-center gap-2"
+      >
+        <div className="h-5 w-5 border-2 border-t-white border-white/20 rounded-full animate-spin mr-2"></div>
+        <span>Downloading...</span>
+      </button>
+    );
+  };
+  
+  // Effect to animate typing the terminal output
+  useEffect(() => {
+    if (!enrichLoading) return;
+    
+    // Initialize steps with proper formatting if needed
+    if (loadingSteps.length === 0 && matchingCount === null) {
+      setLoadingSteps(['Counting matches...']);
+    }
+    
+    let isCancelled = false;
+    let timeoutId;
+
+    // Find the first line that is not fully typed
+    let lines = loadingText.split('\n');
+    let stepIndex = lines.length - 1;
+    if (stepIndex < 0) stepIndex = 0;
+    if (stepIndex >= loadingSteps.length) stepIndex = loadingSteps.length - 1;
+    
+    // Update the currentStepIndex state
+    setCurrentStepIndex(stepIndex);
+    
+    let charIndex = lines[stepIndex]?.length || 0;
+
+    function type() {
+      if (isCancelled) return;
+      // Build up all previous lines fully
+      let text = '';
+      if (stepIndex > 0) {
+        // For completed lines, add them as they are in loadingSteps
+        for (let i = 0; i < stepIndex; i++) {
+          text += loadingSteps[i] + '\n';
+        }
+      } 
+
+      // Current line being typed - get the current step without formatting
+      const currentStep = loadingSteps[stepIndex];
+      if (!currentStep) return; // Guard against undefined
+      
+      // Add the part of the current line that has been typed so far
+      text += currentStep.substring(0, charIndex);
+      
+      setLoadingText(text);
+      
+      if (charIndex < currentStep.length) {
+        charIndex++;
+        // Slow down typing speed for counting/enriching - twice as slow
+        const typingDelay = currentStep.includes('Counting matches') || currentStep.includes('Enriching data') ? 70 : 35;
+        timeoutId = setTimeout(type, typingDelay);
+      } else if (stepIndex < loadingSteps.length - 1) {
+        // Move to next line if there is one
+        stepIndex++;
+        setCurrentStepIndex(stepIndex); // Update the currentStepIndex state when advancing to next step
+        charIndex = 0;
+        timeoutId = setTimeout(type, 250); // Small pause before next line
+      }
+    }
+
+    // Only animate if the last line is not fully typed
+    if (
+      lines.length < loadingSteps.length ||
+      lines[lines.length - 1] !== loadingSteps[lines.length - 1]
+    ) {
+      type();
+    }
+    
+    return () => {
+      isCancelled = true;
+      clearTimeout(timeoutId);
+      if (!enrichLoading) {
+        setLoadingText("");
+      }
+    };
+  }, [enrichLoading, loadingSteps, loadingText, matchingCount]);
+  
+  // For the terminal view section - reorganize to show both the terminal and column selection at the same time
+  return (
+    <AnimatePresence>
+      {drawerOpen && (
+        <>
+          {/* Overlay for clicking outside to close */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-black/30 z-20"
+            onClick={handleDrawerClose}
+          />
+          
+          {/* Drawer */}
+          <motion.aside
+            key="enrich-drawer"
+            initial={{ x: -350, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: -350, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="fixed top-0 left-0 bottom-0 w-96 max-w-[90vw] bg-[#2b2b2b] border-r border-[#404040] shadow-lg text-sm text-neutral-200 z-30 flex flex-col"
+          >
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-[#404040] p-4">
+              <div className="flex items-center">
+                {uploadStep > 0 && !enrichLoading && matchingCount === null && (
+                  <button
+                    onClick={() => uploadStep > 0 ? resetUpload() : handleDrawerClose()}
+                    className="mr-3 h-7 w-7 flex items-center justify-center rounded-full bg-[#303030] hover:bg-[#404040] transition-colors"
+                  >
+                    <ChevronLeftIcon className="h-4 w-4" />
+                  </button>
+                )}
+                <h2 className="text-base font-semibold">
+                  {uploadStep === 0 
+                    ? "Enrich Your Data" 
+                    : "Select Column"}
+                </h2>
+              </div>
+              <button
+                aria-label="close drawer"
+                onClick={handleDrawerClose}
+                className="flex h-6 w-6 items-center justify-center rounded-full bg-[#3a3a3a] text-neutral-400 hover:text-white"
+              >
+                <XMarkIcon className="h-4 w-4" />
+              </button>
+            </div>
+            
+            {/* Content */}
+            <div className="p-4 space-y-4 flex-1 overflow-y-auto thin-scrollbar pb-24">
+              {/* STEP 0: UPLOAD CSV */}
+              {uploadStep === 0 && (
+                <>
+                  <div className="mb-4 space-y-3">
+                    <p className="text-xs text-neutral-400">Upload a CSV with LinkedIn URLs and receive email, phone, etc.</p>
+                    
+                    {/* Process visualization */}
+                    <div className="flex items-center justify-between py-3 px-1">
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 rounded-full bg-[#303030] flex items-center justify-center mb-1">
+                          <FileUp className="h-5 w-5 text-blue-400" />
+                        </div>
+                        <span className="text-[10px] text-neutral-400">Upload CSV</span>
+                      </div>
+                      
+                      <div className="flex-1 h-[2px] bg-gradient-to-r from-transparent via-[#404040] to-transparent mx-1"></div>
+                      
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 rounded-full bg-[#303030] flex items-center justify-center mb-1">
+                          <CheckCircle className="h-5 w-5 text-green-400" />
+                        </div>
+                        <span className="text-[10px] text-neutral-400">Enrich Data</span>
+                      </div>
+                      
+                      <div className="flex-1 h-[2px] bg-gradient-to-r from-transparent via-[#404040] to-transparent mx-1"></div>
+                      
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 rounded-full bg-[#303030] flex items-center justify-center mb-1">
+                          <Download className="h-5 w-5 text-purple-400" />
+                        </div>
+                        <span className="text-[10px] text-neutral-400">Download</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="border border-dashed border-[#404040] rounded-lg p-6 text-center space-y-3">
+                    <div className="flex justify-center">
+                      <Upload className="h-7 w-7 text-neutral-400" />
+                    </div>
+                    <div>
+                      <p className="font-medium">Upload CSV File</p>
+                      <p className="text-xs text-neutral-400 mt-1">Must contain a column with LinkedIn URLs</p>
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      id="csv-upload"
+                    />
+                    <label
+                      htmlFor="csv-upload"
+                      className="inline-block px-4 py-2 bg-[#404040] hover:bg-[#4a4a4a] transition-colors rounded-md text-sm cursor-pointer"
+                    >
+                      Choose File
+                    </label>
+                  </div>
+                  
+                  {/* Example data format */}
+                  <div className="mt-4 p-3 bg-[#252525] rounded-lg border border-[#303030]">
+                    <p className="text-xs font-medium mb-2">Example CSV format:</p>
+                    <div className="bg-[#1f1f1f] border border-[#404040] rounded overflow-hidden text-[10px]">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-[#404040]">
+                            <th className="px-2 py-1 text-left font-normal text-neutral-400">Name</th>
+                            <th className="px-2 py-1 text-left font-normal text-neutral-400">LinkedIn URL</th>
+                            <th className="px-2 py-1 text-left font-normal text-neutral-400">Email</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-b border-[#404040]">
+                            <td className="px-2 py-1">John Smith</td>
+                            <td className="px-2 py-1 text-blue-400">linkedin.com/in/johnsmith</td>
+                            <td className="px-2 py-1 text-green-400">After enrichment</td>
+                          </tr>
+                          <tr className="border-b border-[#404040]">
+                            <td className="px-2 py-1">Jane Doe</td>
+                            <td className="px-2 py-1 text-blue-400">linkedin.com/in/janedoe</td>
+                            <td className="px-2 py-1 text-green-400">After enrichment</td>
+                          </tr>
+                          <tr>
+                            <td className="px-2 py-1">Alex Johnson</td>
+                            <td className="px-2 py-1 text-blue-400">linkedin.com/in/alexjohnson</td>
+                            <td className="px-2 py-1 text-green-400">After enrichment</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  
+                  {uploadError && (
+                    <div className="bg-red-900/20 border border-red-900/50 text-red-400 p-3 rounded-md text-xs mt-4">
+                      {uploadError}
+                    </div>
+                  )}
+                </>
+              )}
+              
+              {/* STEP 1: SELECT COLUMN AND TERMINAL VIEW */}
+              {uploadStep === 1 && (
+                <div className="space-y-4">
+                  {/* Column selection heading */}
+                  {!enrichLoading && matchingCount === null && <h3 className="font-medium">Which column contains LinkedIn URLs?</h3>}
+                  
+                  {/* When processing or has results - show terminal display */}
+                  {(enrichLoading || matchingCount !== null) && (
+                    <div className="min-h-[200px]">
+                      {/* Terminal style display */}
+                      <div className="w-full bg-[#1a1a1a] border border-[#303030] rounded-md overflow-hidden">
+                        <div className="p-6 font-mono text-sm min-h-[100px]">
+                          {/* For active loading terminal with typing animation */}
+                          {enrichLoading && loadingText.split('\n').map((line, index) => {
+                            const isCurrentTyping = (index === loadingText.split('\n').length - 1);
+                            const isFullyTyped = index < loadingSteps.length && line === loadingSteps[index];
+                            
+                            // Custom styling for different message types
+                            let textClass = 'text-white'; // Default: white text
+                            
+                            // Assign styles based on content
+                            if (line.includes('Found') || line.includes('Complete')) {
+                              textClass = 'text-green-400 font-semibold'; // Found matches and Complete: green, bold
+                            } else if (line.includes('Enriching data')) {
+                              textClass = 'text-white font-medium';
+                            } else if (line.includes('Error') || line.includes('No matches found')) {
+                              textClass = 'text-red-400 font-semibold'; // Errors: red, bold
+                            }
+                            
+                            return (
+                              <div key={index} className={textClass}>
+                                {line.endsWith('...') ? (
+                                  <>
+                                    {line.slice(0, -3)}
+                                    <span className="wave-dot">.</span>
+                                    <span className="wave-dot">.</span>
+                                    <span className="wave-dot">.</span>
+                                  </>
+                                ) : (
+                                  line
+                                )}
+                                {isCurrentTyping && enrichLoading && !isFullyTyped && (
+                                  <span className="inline-block h-4 w-2.5 bg-neutral-300 ml-0.5 animate-pulse"></span>
+                                )}
+                              </div>
+                            );
+                          })}
+                          
+                          {/* For static terminal display (when processing is done) */}
+                          {!enrichLoading && matchingCount !== null && (
+                            <>
+                              <div className="text-white">
+                                Counting matches...
+                              </div>
+                              <div className="text-green-400 font-semibold">
+                                • Found {matchingCount} matches
+                              </div>
+                              {loadingSteps.some(step => step.includes('Enriching data')) && (
+                                <div className="text-white font-medium mt-1">
+                                  Enriching data...
+                                </div>
+                              )}
+                              {loadingSteps.some(step => step.includes('Complete')) && (
+                                <div className="text-green-400 font-semibold mt-1">
+                                  • Complete
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Selected columns display - always show */}
+                  {!enrichLoading && matchingCount === null ? (
+                    /* Only show column selection when not processing */
+                    <div className="space-y-2">
+                      {csvColumns.map((column, idx) => {
+                        const isSelected = selectedColumns.includes(column.name);
+                        const isAutoDetected = column.name === autoDetectedColumn;
+                        return (
+                          <div key={idx} className="space-y-1">
+                            <button
+                              onClick={() => handleColumnSelect(column.name)}
+                              className={`p-3 rounded-md border ${
+                                isSelected 
+                                  ? 'bg-green-900/20 border-green-800 text-green-400' 
+                                  : 'bg-[#333333]/30 border-[#404040]/30 text-white/50 hover:bg-[#333333]/50 hover:border-[#404040]/50'
+                              } w-full flex justify-between items-center relative transition-colors`}
+                            >
+                              <div className="flex flex-col items-start">
+                                <span>{column.name}</span>
+                              </div>
+                              {isSelected ? (
+                                <CheckCircle className="h-4 w-4 text-green-400" />
+                              ) : (
+                                <CirclePlus className="h-4 w-4 text-neutral-500/30" />
+                              )}
+                              
+                              {/* Auto-detected label */}
+                              {isAutoDetected && (
+                                <div className="absolute -top-2.5 right-12 text-[9px] text-neutral-200 font-medium px-1.5 bg-[#2b2b2b] rounded-sm">
+                                  auto detected
+                                </div>
+                              )}
+                            </button>
+                            
+                            {/* Sample data display */}
+                            {isSelected && getColumnSamples(column.name).length > 0 && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="ml-3 overflow-hidden"
+                              >
+                                <div className="border-l border-green-800/30 pl-3 py-1 space-y-1">
+                                  {getColumnSamples(column.name).map((sample, i) => (
+                                    <div key={i} className="text-xs text-neutral-400 truncate max-w-full">
+                                      {sample}
+                                    </div>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      
+                      {/* Reset button - only show when in column selection state */}
+                      <div className="mt-6 flex justify-end items-center">
+                        <button 
+                          onClick={resetUpload}
+                          className="text-xs text-neutral-500 hover:text-neutral-300"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* After column selection, show nothing in this area */
+                    null
+                  )}
+                  
+                  {uploadError && (
+                    <div className="bg-red-900/20 border border-red-900/50 text-red-400 p-3 rounded-md text-xs">
+                      {uploadError}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* Fixed bottom-of-drawer buttons */}
+            <div className="absolute bottom-0 left-0 right-0 p-4 bg-[#2b2b2b] border-t border-[#404040] shadow-lg">
+              {/* When in column selection, show "Start Enrichment" button */}
+              {csvData && uploadStep === 1 && !enrichLoading && matchingCount === null && (
+                <button 
+                  onClick={handleEnrichData}
+                  disabled={selectedColumns.length === 0 || enrichButtonProcessing}
+                  className="w-full py-3 text-sm rounded-md bg-[#404040] hover:bg-[#4a4a4a] text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {enrichButtonProcessing ? (
+                    <>
+                      <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-5 w-5" />
+                      <span>Start Enrichment</span>
+                    </>
+                  )}
+                </button>
+              )}
+              
+              {/* When enrichment is complete, show "Confirm & Download" button */}
+              {matchingCount !== null && (
+                <div className="flex flex-col items-center">
+                  {renderDownloadButton()}
+                </div>
+              )}
+            </div>
+          </motion.aside>
+        </>
+      )}
+    </AnimatePresence>
+  );
+};
+
+export default EnrichmentDrawer; 
