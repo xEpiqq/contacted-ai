@@ -1250,6 +1250,9 @@ export default function Login() {
   // Add state for enrichment success toast (around line 153 with other toast states)
   const [showEnrichmentSuccessToast, setShowEnrichmentSuccessToast] = useState(false);
   
+  // Add new state for blinking ellipsis text near other state variables
+  const [blinkingEllipsisText, setBlinkingEllipsisText] = useState("Counting matches");
+  
   // Fetch user data from Supabase when component mounts
   useEffect(() => {
     const fetchUserData = async () => {
@@ -1978,7 +1981,7 @@ export default function Login() {
     setEnrichLoading(true);
     setMatchingCount(null);
     setMatchingResult(null);
-    setLoadingSteps(['Counting matches']); // Initial step for blinking ellipsis effect
+    setLoadingSteps(['Counting matches']); // Initial: blinking ellipsis will be handled by blinkingEllipsisText state & render logic
     
     try {
       const selectedColumn = selectedColumns[0];
@@ -2001,43 +2004,39 @@ export default function Login() {
       setMatchingCount(matchCount);
       setMatchingResult(data);
       
+      const countingDoneText = "Counting matches done";
+
       if (matchCount > 0) {
         console.log("Found matches:", matchCount, "- proceeding with enrichment");
-        
-        setTimeout(() => { // After 1s (allows counting animation to run)
-          setLoadingSteps(prev => [`Counting matches...done`, `• Found ${matchCount} matches`]); // Update counting and add found
-
-          setTimeout(() => { // After another 0.6s
-            setLoadingSteps(prev => {
-              if (prev.some(s => s.includes("Enriching data"))) return prev; // Prevent duplicate
-              return [...prev, 'Enriching data...'];
-            });
-            handleConfirmEnrich(data, matchCount); // This will add "• Complete"
-          }, 600);
-        }, 1000);
+        // Set steps up to "Enriching data..." then call handleConfirmEnrich
+        // handleConfirmEnrich will then add "• Complete"
+        setTimeout(() => {
+          const stepsBeforeConfirm = [countingDoneText, `• Found ${matchCount} matches`, 'Enriching data...'];
+          setLoadingSteps(stepsBeforeConfirm);
+          handleConfirmEnrich(data, matchCount, stepsBeforeConfirm); // Pass current steps for clarity
+        }, 1500); 
       } else {
         setTimeout(() => {
-          setLoadingSteps(prev => [`Counting matches...done`, '• No matches found to enrich.']);
+          setLoadingSteps([countingDoneText, '• No matches found to enrich.']);
           setEnrichLoading(false);
-        }, 1000);
+        }, 1500);
       }
     } catch (error) {
       setUploadError(error.message);
-      setLoadingSteps(prev => [...prev, '• Error in enrichment preview']);
+      const countingFailedText = "Counting matches failed";
+      // Ensure error messages are clean
+      setLoadingSteps(prev => {
+        const base = prev.filter(s => s !== countingFailedText && !s.startsWith('• Error') && !s.toLowerCase().includes('Complete'));
+        return [countingFailedText, '• Error in enrichment preview'];
+      });
       setEnrichLoading(false);
     }
   };
 
-  // Modify handleConfirmEnrich to ensure "• Complete" is added once and correctly
-  const handleConfirmEnrich = async (matchingResultParam, matchCountParam) => {
+  // Modify handleConfirmEnrich to prevent adding "• Complete"
+  const handleConfirmEnrich = async (matchingResultParam, matchCountParam, prevLoadingSteps) => {
     const resultToUse = matchingResultParam || matchingResult;
     const countToUse = matchCountParam || matchingCount;
-
-    console.log("handleConfirmEnrich (PREPARE EXPORT) called", {
-      countToUse,
-      hasStoragePath: resultToUse?.storage_path ? true : false,
-      usingParams: !!matchingResultParam
-    });
 
     if (selectedColumns.length === 0 || !countToUse) {
       console.error("Missing matchingCount or selected column for prepare export");
@@ -2048,16 +2047,15 @@ export default function Login() {
     setEnrichButtonProcessing(true);
     setEnrichmentComplete(false);
 
-    // Add "• Complete" step correctly and once
-    setLoadingSteps(prev => {
-      // Filter out any existing "complete" or "Complete" (case-insensitive for filter) and "Enriching data..."
-      const baseSteps = prev.filter(step => 
-          !step.toLowerCase().includes('complete') && 
-          !step.includes('Enriching data...')
-      );
-      // Re-add "Enriching data..." to ensure it's before "• Complete"
-      return [...baseSteps, 'Enriching data...', '• Complete'];
-    });
+    // Explicitly set the steps. "• Complete" is no longer added.
+    // prevLoadingSteps should be ["Counting matches done", "• Found X matches", "Enriching data..."]
+    if (prevLoadingSteps) {
+        setLoadingSteps(prevLoadingSteps); 
+    }
+    // If prevLoadingSteps is somehow undefined, ensure we have a sensible default, though this shouldn't happen.
+    // else {
+    //    setLoadingSteps(['Enriching data...']); // Fallback, should be reviewed if hit.
+    // }
 
     try {
       const selectedColumn = selectedColumns[0];
@@ -2067,12 +2065,6 @@ export default function Login() {
         const file = fileInputRef.current.files[0];
         originalFilename = file.name.replace(/\.[^/.]+$/, "");
       }
-
-      console.log("Making PREPARE EXPORT request with data:", {
-        urls: csvData.map(row => (row[selectedColumn] || "").trim()).filter(Boolean).length,
-        headers,
-        matchingCount: countToUse
-      });
 
       const response = await fetch("/api/people/enrichment", {
         method: "POST",
@@ -2109,20 +2101,32 @@ export default function Login() {
           allCols: data.allCols || headers
         });
         setEnrichmentComplete(true);
+        // Since "• Complete" is removed, we might not need to set enrichLoading to false here immediately,
+        // as the animation might still be typing "Enriching data...". 
+        // It will naturally stop when all steps in loadingSteps are typed.
       } else {
         const errorMessage = data.error || "Failed to prepare enrichment";
         console.error("API error:", errorMessage);
+        setLoadingSteps(prev => {
+          const stepsWithoutError = prev.filter(s => !s.includes('Error')); // Keep existing steps, add error
+          return [...stepsWithoutError, '• Error preparing export'];
+        });
         throw new Error(errorMessage);
       }
     } catch (error) {
       console.error("Prepare enrichment error:", error);
       setUploadError(error.message || "An unexpected error occurred during export preparation");
       setLoadingSteps(prev => {
-        if (prev.some(step => step.includes('Error'))) return prev;
-        return [...prev.filter(s => !s.toLowerCase().includes('complete')), '• Error preparing export'];
+        const stepsWithoutError = prev.filter(s => !s.includes('Error'));
+        return [...stepsWithoutError, '• Error preparing export'];
       });
     } finally {
-      setEnrichLoading(false);
+      // setEnrichLoading(false) is critical. It should be set to false AFTER the last intended message
+      // (like "Enriching data..." or an error) has had a chance to type out.
+      // If we set it false too early, the typing animation stops prematurely.
+      // Consider if this needs a slight delay if the last step isn't fully typed.
+      // For now, assuming the typing animation handles its own completion based on loadingSteps.
+      setEnrichLoading(false); 
       setEnrichButtonProcessing(false);
     }
   };
@@ -2801,23 +2805,24 @@ export default function Login() {
 
   // Add blinking ellipsis effect for "Counting matches"
   useEffect(() => {
-    if (!enrichLoading) return;
-    
-    // Only run this effect when we are in the "Counting matches" state
-    if (!loadingSteps.some(step => step.includes('Counting matches'))) return;
-    if (loadingSteps.length > 1) return; // Only during the first step
-    
-    let dotCount = 0;
-    const intervalId = setInterval(() => {
-      dotCount = (dotCount + 1) % 4; // 0, 1, 2, 3, 0, 1, ...
-      const dots = '.'.repeat(dotCount);
-      setLoadingSteps([`Counting matches${dots}`]);
-    }, 500); // Change dots every 500ms
-    
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [enrichLoading, loadingSteps.length]);
+    let intervalId;
+    if (enrichLoading && loadingSteps.length === 1 && loadingSteps[0] === "Counting matches") {
+      let dotCount = 0;
+      setBlinkingEllipsisText("Counting matches"); // Initial text without dots
+      intervalId = setInterval(() => {
+        dotCount = (dotCount + 1) % 4;
+        setBlinkingEllipsisText(`Counting matches${".".repeat(dotCount)}`);
+      }, 500);
+    } else {
+      // If not in the specific counting state, ensure blinking text is reset or reflects the actual first step.
+      if (loadingSteps.length > 0 && loadingSteps[0] !== "Counting matches") {
+        setBlinkingEllipsisText(loadingSteps[0]);
+      } else if (!enrichLoading) {
+        setBlinkingEllipsisText(""); // Clear if not loading
+      }
+    }
+    return () => clearInterval(intervalId);
+  }, [enrichLoading, loadingSteps]);
 
   // Modify the effect to add special formatting to the loadingSteps as soon as they're created
   useEffect(() => {
@@ -2841,9 +2846,9 @@ export default function Login() {
       }
       
       // Check if we need to add "complete" step
-      if (loadingSteps.includes('Enriching data...') && !loadingSteps.includes('  • complete')) {
+      if (loadingSteps.includes('Enriching data...') && !loadingSteps.includes('  • Complete')) {
         setTimeout(() => {
-          setLoadingSteps(prev => [...prev, '  • complete']);
+          setLoadingSteps(prev => [...prev, '  • Complete']);
         }, 1000);
       }
     }
@@ -3031,10 +3036,8 @@ export default function Login() {
                                     // Assign styles based on content
                                     if (line.includes('Found')) {
                                       textClass = 'text-green-400 font-semibold'; // Found matches: green, bold
-                                    } else if (line.includes('Enriching data')) {
-                                      textClass = 'text-white font-medium'; // Enriching data: white, medium
-                                    } else if (line.includes('Complete')) { // Changed to check for capital 'C'
-                                      textClass = 'text-green-400 font-semibold'; // Style for "Complete"
+                                    } else if (line.includes('Enriching data')) { // Group 'Complete' with 'Enriching data' for default white styling
+                                      textClass = 'text-white font-medium';
                                     } else if (line.includes('Error') || line.includes('No matches found')) {
                                       textClass = 'text-red-400 font-semibold'; // Errors: red, bold
                                     }
@@ -3094,7 +3097,7 @@ export default function Login() {
                                     Enriching data...
                                   </div>
                                 )}
-                                {loadingSteps.some(step => step.includes('Complete') || step.includes('Complete')) && (
+                                {loadingSteps.some(step => step.includes('Complete')) && (
                                   <div className="text-green-400 font-semibold mt-1">
                                     • Complete
                                   </div>
