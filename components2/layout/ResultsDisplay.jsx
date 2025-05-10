@@ -5,9 +5,8 @@ import { useSearchContext } from "../context/SearchContext";
 import { motion } from "framer-motion";
 import { Search, Download, CheckCircle, Loader } from "lucide-react";
 
-function ResultsDisplay() {
+function ResultsDisplay({ handleResetSearch }) {
   const {
-    handleResetSearch,
     searchFilters,
     searchResults,
     resultsLoading,

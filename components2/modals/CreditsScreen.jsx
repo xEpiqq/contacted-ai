@@ -125,7 +125,9 @@ function CreditsScreen({ onClose }) {
                       <span className="px-1.5 py-0.5 text-[10px] font-medium bg-green-500/20 text-green-400 border border-green-500/30 rounded">POPULAR</span>
                     </div>
                     <p className="text-sm text-neutral-400 mt-1">Monthly subscription</p>
+
                   </div>
+
                 </div>
                 <div className="text-white font-medium">$149/mo</div>
               </div>
