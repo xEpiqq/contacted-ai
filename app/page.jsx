@@ -1,7 +1,7 @@
 /* app/login/page.jsx */
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   ArrowUpIcon,
   ArrowLeftIcon,
@@ -788,7 +788,7 @@ function ManualSearch({
                         pendingText={filter.pendingText || ""}
                         setPendingText={(txt) => onUpdateFilterPendingText(idx, txt)}
                         column={filter.column}
-                        tableName="usa4_new_v2"
+                        tableName="all"
                       />
                     </div>
                   )}
@@ -1203,6 +1203,8 @@ export default function Login() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [enrichmentComplete, setEnrichmentComplete] = useState(false);
   const [enrichmentResult, setEnrichmentResult] = useState(null);
+  const [enrichButtonProcessing, setEnrichButtonProcessing] = useState(false);
+  const [matchingResult, setMatchingResult] = useState(null); // Store full result from preview step
 
   // Plus button dropdown state
   const [showPlusOptions, setShowPlusOptions] = useState(false);
@@ -1244,6 +1246,9 @@ export default function Login() {
   
   // Add this after existing loadingText state
   const [loadingSteps, setLoadingSteps] = useState([]);
+  
+  // Add state for enrichment success toast (around line 153 with other toast states)
+  const [showEnrichmentSuccessToast, setShowEnrichmentSuccessToast] = useState(false);
   
   // Fetch user data from Supabase when component mounts
   useEffect(() => {
@@ -1972,22 +1977,17 @@ export default function Login() {
     
     setEnrichLoading(true);
     setMatchingCount(null);
-    setLoadingSteps([]); // Reset loading steps
+    setMatchingResult(null);
+    setLoadingSteps(['Counting matches']); // Initial step for blinking ellipsis effect
     
     try {
       const selectedColumn = selectedColumns[0];
-      const urls = csvData
-        .map(row => (row[selectedColumn] || "").trim())
-        .filter(Boolean);
+      const urls = csvData.map(row => (row[selectedColumn] || "").trim()).filter(Boolean);
       
       const response = await fetch("/api/people/enrichment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          linkedin_urls: urls,
-          confirm: false,
-          table_name: "all" // Search across all databases
-        })
+        body: JSON.stringify({ linkedin_urls: urls, confirm: false, table_name: "all" })
       });
       
       if (!response.ok) {
@@ -1996,35 +1996,84 @@ export default function Login() {
       }
       
       const data = await response.json();
-      setMatchingCount(data.matchingCount || 0);
+      const matchCount = data.matchingCount || 0;
       
-      // Don't end loading - keep showing the console with typing animation
-      // We'll keep enrichLoading true so the console stays visible
+      setMatchingCount(matchCount);
+      setMatchingResult(data);
+      
+      if (matchCount > 0) {
+        console.log("Found matches:", matchCount, "- proceeding with enrichment");
+        
+        setTimeout(() => { // After 1s (allows counting animation to run)
+          setLoadingSteps(prev => [`Counting matches...done`, `• Found ${matchCount} matches`]); // Update counting and add found
+
+          setTimeout(() => { // After another 0.6s
+            setLoadingSteps(prev => {
+              if (prev.some(s => s.includes("Enriching data"))) return prev; // Prevent duplicate
+              return [...prev, 'Enriching data...'];
+            });
+            handleConfirmEnrich(data, matchCount); // This will add "• Complete"
+          }, 600);
+        }, 1000);
+      } else {
+        setTimeout(() => {
+          setLoadingSteps(prev => [`Counting matches...done`, '• No matches found to enrich.']);
+          setEnrichLoading(false);
+        }, 1000);
+      }
     } catch (error) {
       setUploadError(error.message);
-      setEnrichLoading(false); // Only stop loading if there's an error
+      setLoadingSteps(prev => [...prev, '• Error in enrichment preview']);
+      setEnrichLoading(false);
     }
   };
 
-  // Handle enrichment confirmation
-  const handleConfirmEnrich = async () => {
-    if (selectedColumns.length === 0 || !matchingCount) return;
-    
-    setEnrichLoading(true);
+  // Modify handleConfirmEnrich to ensure "• Complete" is added once and correctly
+  const handleConfirmEnrich = async (matchingResultParam, matchCountParam) => {
+    const resultToUse = matchingResultParam || matchingResult;
+    const countToUse = matchCountParam || matchingCount;
+
+    console.log("handleConfirmEnrich (PREPARE EXPORT) called", {
+      countToUse,
+      hasStoragePath: resultToUse?.storage_path ? true : false,
+      usingParams: !!matchingResultParam
+    });
+
+    if (selectedColumns.length === 0 || !countToUse) {
+      console.error("Missing matchingCount or selected column for prepare export");
+      setEnrichLoading(false);
+      return;
+    }
+
+    setEnrichButtonProcessing(true);
     setEnrichmentComplete(false);
-    setEnrichmentResult(null);
-    
+
+    // Add "• Complete" step correctly and once
+    setLoadingSteps(prev => {
+      // Filter out any existing "complete" or "Complete" (case-insensitive for filter) and "Enriching data..."
+      const baseSteps = prev.filter(step => 
+          !step.toLowerCase().includes('complete') && 
+          !step.includes('Enriching data...')
+      );
+      // Re-add "Enriching data..." to ensure it's before "• Complete"
+      return [...baseSteps, 'Enriching data...', '• Complete'];
+    });
+
     try {
       const selectedColumn = selectedColumns[0];
       const headers = Object.keys(csvData[0] || {});
-      
-      // Get original filename for better export naming
       let originalFilename = "";
       if (fileInputRef.current && fileInputRef.current.files.length > 0) {
         const file = fileInputRef.current.files[0];
-        originalFilename = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
+        originalFilename = file.name.replace(/\.[^/.]+$/, "");
       }
-      
+
+      console.log("Making PREPARE EXPORT request with data:", {
+        urls: csvData.map(row => (row[selectedColumn] || "").trim()).filter(Boolean).length,
+        headers,
+        matchingCount: countToUse
+      });
+
       const response = await fetch("/api/people/enrichment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2033,57 +2082,193 @@ export default function Login() {
           csv_rows: csvData,
           csv_headers: headers,
           linkedinHeader: selectedColumn,
-          confirm: true,
-          table_name: "all", // Search across all databases
-          original_filename: originalFilename // Pass the original filename to the API
+          prepare_export: true,
+          table_name: "all",
+          original_filename: originalFilename,
+          row_count: countToUse
         })
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to complete enrichment");
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error("Error parsing response:", parseError);
+        throw new Error("Failed to parse server response");
       }
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        // Show success message
+
+      if (response.ok) {
         setUploadError("");
-        
-        // Refresh the exports list
-        setExportsFetched(false); // Force a refetch of exports
-        const exportsResponse = await fetchExports(); // Immediately fetch the updated exports
-        
-        // Find the newly created export (should be the most recent one)
-        let newExport = null;
-        if (exportsResponse && exportsResponse.length > 0) {
-          newExport = exportsResponse[0]; // The most recent export
-        }
-        
-        // Show the success screen with download option
-        setEnrichmentComplete(true);
+        const storagePath = data.storage_path || `temp-export-${Date.now()}`;
+        const exportName = data.exportName || `${originalFilename || 'Export'} (Enriched)`;
         setEnrichmentResult({
-          rowsEnriched: matchingCount,
-          exportId: newExport?.id,
-          exportName: newExport?.name || `${originalFilename} (Enriched)`
+          rowsEnriched: data.row_count || countToUse,
+          exportId: null,
+          exportName: exportName,
+          storage_path: storagePath,
+          allCols: data.allCols || headers
         });
+        setEnrichmentComplete(true);
       } else {
-        throw new Error("Enrichment failed");
+        const errorMessage = data.error || "Failed to prepare enrichment";
+        console.error("API error:", errorMessage);
+        throw new Error(errorMessage);
       }
     } catch (error) {
-      setUploadError(error.message);
+      console.error("Prepare enrichment error:", error);
+      setUploadError(error.message || "An unexpected error occurred during export preparation");
+      setLoadingSteps(prev => {
+        if (prev.some(step => step.includes('Error'))) return prev;
+        return [...prev.filter(s => !s.toLowerCase().includes('complete')), '• Error preparing export'];
+      });
     } finally {
       setEnrichLoading(false);
+      setEnrichButtonProcessing(false);
     }
   };
 
+  const handleFinalizeDownloadAndDeductCredits = async () => {
+    if (!enrichmentResult || !enrichmentResult.storage_path || !matchingCount) {
+      console.error("Cannot finalize: Missing enrichment result, storage_path, or matchingCount", enrichmentResult);
+      setUploadError("Cannot finalize export. Please try the process again.");
+      return;
+    }
+
+    setDownloadInProgress(true);
+    setUploadError(""); // Clear previous errors
+
+    // Extract LinkedIn URLs from the selected column in csvData
+    const selectedColumn = selectedColumns[0];
+    const linkedinUrls = selectedColumn && csvData ? 
+      csvData.map(row => (row[selectedColumn] || "").trim()).filter(Boolean)
+      : [];
+
+    console.log("handleFinalizeDownloadAndDeductCredits called with:", {
+      storage_path: enrichmentResult.storage_path,
+      exportName: enrichmentResult.exportName,
+      rowsEnriched: matchingCount, // This is the countToUse / matchCount
+      allCols: enrichmentResult.allCols,
+      linkedinUrlsCount: linkedinUrls.length
+    });
+
+    try {
+      const response = await fetch("/api/people/enrichment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          finalize: true, // Changed from confirm_and_save to finalize to match the backend
+          storage_path: enrichmentResult.storage_path,
+          exportName: enrichmentResult.exportName,
+          row_count: matchingCount, // Send the original match count for credit deduction
+          allCols: enrichmentResult.allCols, // Send allCols if needed for final CSV generation by backend
+          table_name: "all", // Always use "all" to search across all tables
+          linkedin_urls: linkedinUrls // Use the extracted LinkedIn URLs
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to finalize export and deduct credits.");
+      }
+
+      // At this point, credits are deducted and export is saved in DB by the backend.
+      console.log("Finalize Export successful:", data);
+      
+      // Refresh user's credits
+      const newCredits = creditsRemaining - matchingCount;
+      setCreditsRemaining(newCredits < 0 ? 0 : newCredits);
+
+      // Refresh the exports list in the drawer
+      fetchExports(); 
+      
+      // Show toast notification BEFORE closing drawer so they appear simultaneously
+      setShowEnrichmentSuccessToast(true);
+      setTimeout(() => setShowEnrichmentSuccessToast(false), 5000);
+      
+      // Close the drawer right after showing toast
+      handleDrawerClose();
+
+      // Start the download after a small delay
+      setTimeout(() => {
+        // Trigger the download of the now confirmed and saved export
+        if (data.export_id) {
+          // Use direct client-side download instead of calling handleDownloadExport
+          // which would potentially redirect the page
+          try {
+            fetch(`/api/people/saved-exports/${data.export_id}/legit-download`)
+              .then(response => {
+                if (!response.ok) {
+                  throw new Error(`Download failed with status: ${response.status}`);
+                }
+                return response.blob();
+              })
+              .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = enrichmentResult.exportName ? `${enrichmentResult.exportName}.csv` : 'enriched-data.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                window.URL.revokeObjectURL(url);
+              })
+              .catch(downloadError => {
+                console.error("Error downloading file:", downloadError);
+                setUploadError("Export saved but download failed. You can find it in your exports list.");
+              });
+          } catch (downloadError) {
+            console.error("Error downloading file:", downloadError);
+            setUploadError("Export saved but download failed. You can find it in your exports list.");
+          }
+        } else {
+          // Fallback if export_id is not returned
+          console.warn("No export_id returned from finalize. Manually downloading from storage path");
+          
+          // Create a download link for the file in storage
+          const supabase = createClient(); // Initialize supabase client
+          supabase.storage
+            .from('exports')
+            .createSignedUrl(enrichmentResult.storage_path, 60) // 60 seconds expiry
+            .then(({ data: signedUrlData }) => {
+              if (signedUrlData?.signedUrl) {
+                // Create a temporary link element and trigger the download
+                const a = document.createElement('a');
+                a.href = signedUrlData.signedUrl;
+                a.download = enrichmentResult.exportName || 'enriched-data.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+              } else {
+                throw new Error("Failed to generate download URL");
+              }
+            })
+            .catch(error => {
+              console.error("Error generating download URL:", error);
+              setUploadError("Failed to generate download URL. Please try again.");
+            });
+        }
+      }, 300);
+
+    } catch (error) {
+      console.error("Finalize download and deduct credits error:", error);
+      setUploadError(error.message || "An error occurred while finalizing your export.");
+    } finally {
+      setDownloadInProgress(false);
+    }
+  };
   // Reset the enrichment process and return to step 0
+
   const resetEnrichment = () => {
     // Clear all enrichment-related state
     setEnrichmentComplete(false);
     setEnrichmentResult(null);
     setMatchingCount(null);
+    setMatchingResult(null);
     setShowConfirmation(false);
+    setEnrichButtonProcessing(false);
     
     // Reset the CSV data and related state
     setCsvData(null);
@@ -2237,11 +2422,48 @@ export default function Login() {
       const export_item = exports.find(e => e.id === id);
       
       if (export_item?.storage_path) {
-        // Direct download from storage
-        window.location.href = `/api/people/saved-exports/${id}/legit-download`;
+        // Use a fetch request to get the file content instead of a redirect
+        const response = await fetch(`/api/people/saved-exports/${id}/legit-download`);
+        
+        if (!response.ok) {
+          throw new Error(`Download failed with status: ${response.status}`);
+        }
+        
+        // Get the file content as blob
+        const blob = await response.blob();
+        
+        // Create object URL for the blob
+        const url = window.URL.createObjectURL(blob);
+        
+        // Create a temporary link element and trigger the download
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = export_item.name ? `${export_item.name}.csv` : 'export.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        // Clean up the object URL
+        window.URL.revokeObjectURL(url);
       } else {
-        // Use the regenerating route
-        window.location.href = `/api/people/saved-exports/${id}/download`;
+        // For items without storage_path, use the same approach but with the regenerating endpoint
+        const response = await fetch(`/api/people/saved-exports/${id}/download`);
+        
+        if (!response.ok) {
+          throw new Error(`Download failed with status: ${response.status}`);
+        }
+        
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = export_item?.name ? `${export_item.name}.csv` : 'export.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        window.URL.revokeObjectURL(url);
       }
     } catch (error) {
       console.error("Error downloading export:", error);
@@ -2508,15 +2730,15 @@ export default function Login() {
     return `${mb.toFixed(1)} MB`;
   };
 
-  // Add this effect to create a typing animation for loading text
+  // Modify the effect that creates the typing animation for loading text
   useEffect(() => {
     if (!enrichLoading) return;
-
-    // If no steps, initialize with Counting matches...
+    
+    // Initialize steps with proper formatting if needed
     if (loadingSteps.length === 0 && matchingCount === null) {
-      setLoadingSteps(['Counting matches...']);
+      setLoadingSteps(['Counting matches']); // No bullet, no ellipsis - will be added with animation
     }
-
+    
     let isCancelled = false;
     let timeoutId;
 
@@ -2532,15 +2754,26 @@ export default function Login() {
       // Build up all previous lines fully
       let text = '';
       if (currentStepIndex > 0) {
-        text += loadingSteps.slice(0, currentStepIndex).join('\n') + '\n';
-      }
-      // Animate the current line
-      if (!loadingSteps[currentStepIndex]) return; // Guard against undefined
-      text += loadingSteps[currentStepIndex].substring(0, charIndex);
+        // For completed lines, add them as they are in loadingSteps
+        for (let i = 0; i < currentStepIndex; i++) {
+          text += loadingSteps[i] + '\n';
+        }
+      } 
+
+      // Current line being typed - get the current step without formatting
+      const currentStep = loadingSteps[currentStepIndex];
+      if (!currentStep) return; // Guard against undefined
+      
+      // Add the part of the current line that has been typed so far
+      text += currentStep.substring(0, charIndex);
+      
       setLoadingText(text);
-      if (charIndex < loadingSteps[currentStepIndex].length) {
+      
+      if (charIndex < currentStep.length) {
         charIndex++;
-        timeoutId = setTimeout(type, 35); // Slower typing speed
+        // Slow down typing speed for "Counting matches" - twice as slow
+        const typingDelay = currentStep.includes('Counting matches') ? 70 : 35;
+        timeoutId = setTimeout(type, typingDelay);
       } else if (currentStepIndex < loadingSteps.length - 1) {
         // Move to next line if there is one
         currentStepIndex++;
@@ -2556,7 +2789,7 @@ export default function Login() {
     ) {
       type();
     }
-
+    
     return () => {
       isCancelled = true;
       clearTimeout(timeoutId);
@@ -2566,15 +2799,55 @@ export default function Login() {
     };
   }, [enrichLoading, loadingSteps]);
 
-  // Effect to add "Found X matches" step when matchingCount is available
+  // Add blinking ellipsis effect for "Counting matches"
+  useEffect(() => {
+    if (!enrichLoading) return;
+    
+    // Only run this effect when we are in the "Counting matches" state
+    if (!loadingSteps.some(step => step.includes('Counting matches'))) return;
+    if (loadingSteps.length > 1) return; // Only during the first step
+    
+    let dotCount = 0;
+    const intervalId = setInterval(() => {
+      dotCount = (dotCount + 1) % 4; // 0, 1, 2, 3, 0, 1, ...
+      const dots = '.'.repeat(dotCount);
+      setLoadingSteps([`Counting matches${dots}`]);
+    }, 500); // Change dots every 500ms
+    
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [enrichLoading, loadingSteps.length]);
+
+  // Modify the effect to add special formatting to the loadingSteps as soon as they're created
   useEffect(() => {
     if (enrichLoading && matchingCount !== null) {
-      const foundMatchesText = `• Found ${matchingCount} matches`;
+      const foundMatchesText = `• Found ${matchingCount} matches`; // Bullet for Found matches
+      
       if (loadingSteps.length > 0 && loadingSteps[0] === 'Counting matches...' && (loadingSteps.length === 1 || loadingSteps[1] !== foundMatchesText)) {
         setLoadingSteps(['Counting matches...', foundMatchesText]);
       }
     }
   }, [enrichLoading, matchingCount]);
+
+  // Update the effect that sets additional steps
+  useEffect(() => {
+    if (enrichLoading && matchingCount !== null && loadingSteps.includes(`• Found ${matchingCount} matches`)) {
+      // Check if we need to add "Enriching data..." step
+      if (!loadingSteps.includes('Enriching data...')) {
+        setTimeout(() => {
+          setLoadingSteps(prev => [...prev, 'Enriching data...']);
+        }, 500);
+      }
+      
+      // Check if we need to add "complete" step
+      if (loadingSteps.includes('Enriching data...') && !loadingSteps.includes('  • complete')) {
+        setTimeout(() => {
+          setLoadingSteps(prev => [...prev, '  • complete']);
+        }, 1000);
+      }
+    }
+  }, [enrichLoading, matchingCount, loadingSteps]);
 
   /*────────────────────────────  RENDER  ─────────────────────────*/
 
@@ -2736,26 +3009,39 @@ export default function Login() {
                     ) : uploadStep === 1 ? (
                       <div className="space-y-4">
                         {/* Put the header text back at the top */}
-                        {!enrichLoading && <h3 className="font-medium">Which column contains LinkedIn URLs?</h3>}
+                        {!enrichLoading && matchingCount === null && <h3 className="font-medium">Which column contains LinkedIn URLs?</h3>}
                         
                         {/* Loading indicator */}
                         {enrichLoading ? (
-                          <div className="space-y-6 min-h-[300px] flex flex-col items-center justify-center">
-                            {/* Simple code block style */}
+                          <div className="min-h-[200px] flex flex-col items-center justify-center">
+                            {/* Simple code block style - no header */}
                             <div className="w-full bg-[#1a1a1a] border border-[#303030] rounded-md overflow-hidden">
                               <div className="p-6 font-mono text-sm min-h-[100px]">
-                                {/* Render each line, typing one at a time, with cursor only on the current line */}
+                                {/* Replace the terminal rendering code */}
                                 {(() => {
                                   const lines = loadingText.split('\n');
                                   const totalLines = loadingSteps.length;
-                                  return loadingSteps.map((step, index) => {
+                                  return lines.map((line, index) => {
                                     const isCurrentTyping = (index === lines.length - 1);
-                                    const isFullyTyped = lines[index] === step;
-                                    // Only show lines that have started typing
-                                    if (index > lines.length - 1) return null;
+                                    const isFullyTyped = index < loadingSteps.length && line === loadingSteps[index];
+                                    
+                                    // Custom styling for different message types
+                                    let textClass = 'text-white'; // Default: white text
+                                    
+                                    // Assign styles based on content
+                                    if (line.includes('Found')) {
+                                      textClass = 'text-green-400 font-semibold'; // Found matches: green, bold
+                                    } else if (line.includes('Enriching data')) {
+                                      textClass = 'text-white font-medium'; // Enriching data: white, medium
+                                    } else if (line.includes('Complete')) { // Changed to check for capital 'C'
+                                      textClass = 'text-green-400 font-semibold'; // Style for "Complete"
+                                    } else if (line.includes('Error') || line.includes('No matches found')) {
+                                      textClass = 'text-red-400 font-semibold'; // Errors: red, bold
+                                    }
+                                    
                                     return (
-                                      <div key={index} className={step.includes('Found') ? 'text-green-400 font-semibold' : 'text-neutral-300'}>
-                                        {lines[index]}
+                                      <div key={index} className={textClass}>
+                                        {line}
                                         {isCurrentTyping && enrichLoading && (!isFullyTyped || (index === totalLines - 1 && isFullyTyped)) && (
                                           <span className="inline-block h-4 w-2.5 bg-neutral-300 ml-0.5 animate-pulse"></span>
                                         )}
@@ -2765,109 +3051,80 @@ export default function Login() {
                                 })()}
                               </div>
                             </div>
+                            
+                            {/* Always show download button in loading state too, disabled until enrichment is complete */}
+                            <div className="w-full flex justify-end mt-4">
+                              <button
+                                onClick={() => enrichmentResult?.exportId && handleDownloadExport(enrichmentResult.exportId)}
+                                disabled={!enrichmentComplete || downloadInProgress}
+                                className="px-4 py-2 text-sm rounded-md bg-[#404040] hover:bg-[#4a4a4a] text-white transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed min-w-[200px] justify-center"
+                              >
+                                {downloadInProgress ? (
+                                  <>
+                                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                    <span>Downloading...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Download className="h-4 w-4" />
+                                    <span>Confirm & Download</span>
+                                  </>
+                                )}
+                              </button>
+                              {/* Only show credit usage subtext when the button is active */}
+                              {enrichmentComplete && matchingCount && !downloadInProgress && (
+                                <p className="text-xs text-neutral-500 mt-1">This will use {matchingCount} credits</p>
+                              )}
+                            </div>
                           </div>
-                        ) : matchingCount !== null && !showConfirmation && !enrichmentComplete && (
-                          // This block shows the static "Found X matches" after loading is done,
-                          // before confirmation. This is fine.
-                          <div className="space-y-6 min-h-[300px] flex flex-col items-center justify-center">
+                        ) : matchingCount !== null && !enrichLoading && (
+                          // This block shows the "Found X matches" without any headers or credit info
+                          <div className="min-h-[200px] flex flex-col items-center justify-center">
+                            {/* Terminal display without headers or green arrows */}
                             <div className="w-full bg-[#1a1a1a] border border-[#303030] rounded-md overflow-hidden">
                               <div className="p-6 font-mono text-sm">
-                                <div className="text-neutral-300 flex mb-1">
-                                  <div className="text-green-400 mr-3">{'>'}</div>
-                                  <div>Counting matches...</div>
+                                <div className="text-white">
+                                  Counting matches...
                                 </div>
-                                <div className="text-neutral-300 flex">
-                                  <div className="text-green-400 mr-3">{'>'}</div>
-                                  <div className="text-green-400 font-semibold">• Found {matchingCount} matches</div>
+                                <div className="text-green-400 font-semibold">
+                                  • Found {matchingCount} matches
                                 </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Enrichment success screen */}
-                        {enrichmentComplete && !enrichLoading && (
-                          <div className="bg-[#252525] border border-[#404040] rounded-md p-4 space-y-4">
-                            <div className="flex items-center gap-3">
-                              <div className="h-8 w-8 rounded-full bg-green-900/30 border border-green-800/30 flex items-center justify-center">
-                                <CheckCircle className="h-4 w-4 text-green-400" />
-                              </div>
-                              <h3 className="font-medium text-white">Enrichment Complete!</h3>
-                            </div>
-                            
-                            <p className="text-sm text-neutral-300">
-                              Successfully enriched <span className="text-green-400 font-medium">{enrichmentResult?.rowsEnriched || matchingCount}</span> contacts.
-                            </p>
-                            
-                            <div className="bg-[#303030] border border-[#404040] rounded-md p-3">
-                              <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-2">
-                                  <Table className="h-4 w-4 text-neutral-400" />
-                                  <span className="font-medium text-neutral-200 text-sm">{enrichmentResult?.exportName}</span>
-                                </div>
-                                
-                                <button
-                                  onClick={() => enrichmentResult?.exportId && handleDownloadExport(enrichmentResult.exportId)}
-                                  className="px-3 py-1.5 text-xs rounded-md bg-green-900/40 border border-green-800/30 text-green-400 hover:bg-green-900/60 transition-colors flex items-center gap-1.5"
-                                >
-                                  <Download className="h-3 w-3" />
-                                  <span>Download CSV</span>
-                                </button>
+                                {loadingSteps.some(step => step.includes('Enriching data')) && (
+                                  <div className="text-white font-medium mt-1">
+                                    Enriching data...
+                                  </div>
+                                )}
+                                {loadingSteps.some(step => step.includes('Complete') || step.includes('Complete')) && (
+                                  <div className="text-green-400 font-semibold mt-1">
+                                    • Complete
+                                  </div>
+                                )}
                               </div>
                             </div>
                             
-                            <div className="text-xs text-neutral-500 pt-2 border-t border-[#404040]">
-                              This export has been saved to your exports list for future reference.
-                            </div>
-                            
-                            <div className="flex justify-between pt-3">
+                            {/* Download CSV Button - enabled only when enrichment is complete */}
+                            <div className="w-full flex flex-col items-end mt-4">
                               <button
-                                onClick={resetEnrichment}
-                                className="px-3 py-1.5 text-xs rounded-md bg-[#404040] hover:bg-[#4a4a4a] text-white transition-colors"
+                                onClick={handleFinalizeDownloadAndDeductCredits}
+                                disabled={!enrichmentComplete || downloadInProgress}
+                                className="px-4 py-2 text-sm rounded-md bg-[#404040] hover:bg-[#4a4a4a] text-white transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed min-w-[200px] justify-center"
                               >
-                                Enrich Another File
+                                {downloadInProgress ? (
+                                  <>
+                                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                    <span>Downloading...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Download className="h-4 w-4" />
+                                    <span>Confirm & Download</span>
+                                  </>
+                                )}
                               </button>
-                              
-                              <button
-                                onClick={() => {
-                                  handleDrawerClose();
-                                  setExportsDrawerOpen(true);
-                                }}
-                                className="px-3 py-1.5 text-xs rounded-md bg-transparent border border-[#404040] text-neutral-300 hover:bg-[#353535] transition-colors flex items-center gap-1.5"
-                              >
-                                <Table className="h-3 w-3" />
-                                <span>View All Exports</span>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {showConfirmation && !enrichLoading && !enrichmentComplete && (
-                          <div className="bg-[#252525] border border-[#404040] rounded-md p-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <h3 className="font-medium">Confirm Enrichment</h3>
-                            </div>
-                            <p className="text-sm text-neutral-300">
-                              We'll enrich <span className="text-green-400 font-medium">{matchingCount}</span> contacts with emails, phone numbers, and more.
-                            </p>
-                            <div className="bg-[#1f1f1f] border border-[#404040] rounded p-3 flex items-center gap-2 text-sm">
-                              <DollarSign className="h-4 w-4 text-blue-400" />
-                              <span>This will cost <strong className="text-blue-400">{matchingCount}</strong> credits</span>
-                            </div>
-                            <div className="flex justify-end space-x-3 pt-2">
-                              <button 
-                                onClick={() => setShowConfirmation(false)}
-                                className="px-3 py-1 text-xs text-neutral-400 hover:text-white"
-                              >
-                                Cancel
-                              </button>
-                              <button 
-                                onClick={handleConfirmEnrich}
-                                className="px-3 py-1.5 text-xs rounded-md bg-blue-600 hover:bg-blue-700 text-white transition-colors flex items-center gap-1"
-                              >
-                                <CheckCircle className="h-3 w-3" />
-                                <span>Confirm & Process</span>
-                              </button>
+                              {/* Only show credit usage subtext when the button is active */}
+                              {enrichmentComplete && matchingCount && !downloadInProgress && (
+                                <p className="text-xs text-neutral-500 mt-1">This will use {matchingCount} credits</p>
+                              )}
                             </div>
                           </div>
                         )}
@@ -2878,7 +3135,7 @@ export default function Login() {
                           </div>
                         )}
                         
-                        {!enrichLoading && !showConfirmation && !enrichmentComplete && (
+                        {!enrichLoading && !showConfirmation && !enrichmentComplete && matchingCount === null && (
                           <>
                             <div className="space-y-2">
                               {csvColumns.map((column) => {
@@ -3008,8 +3265,9 @@ export default function Login() {
                         </div>
                         
                         <button
-                          className="w-full py-2 rounded-md bg-white text-black hover:bg-neutral-200 transition-colors"
+                          className="w-full py-2 text-sm rounded-md bg-[#404040] hover:bg-[#4a4a4a] text-white transition-colors flex items-center justify-center gap-2"
                         >
+                          <CheckCircle className="h-4 w-4" />
                           Start Enrichment
                         </button>
                       </div>
@@ -3017,15 +3275,24 @@ export default function Login() {
                   </div>
 
                   {/* Fixed button at the bottom */}
-                  {csvData && uploadStep === 1 && !enrichLoading && !showConfirmation && !enrichmentComplete && (
+                  {csvData && uploadStep === 1 && !enrichLoading && !showConfirmation && !enrichmentComplete && matchingCount === null && (
                     <div className="absolute bottom-0 left-0 right-0 p-4 bg-[#2b2b2b] border-t border-[#404040] shadow-lg">
                       <button 
                         onClick={handleEnrichData}
-                        disabled={selectedColumns.length === 0}
+                        disabled={selectedColumns.length === 0 || enrichButtonProcessing}
                         className="w-full py-3 text-sm rounded-md bg-[#404040] hover:bg-[#4a4a4a] text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        <CheckCircle className="h-5 w-5" />
-                        <span>Start Enrichment</span>
+                        {enrichButtonProcessing ? (
+                          <>
+                            <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="h-5 w-5" />
+                            <span>Start Enrichment</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   )}
@@ -4158,6 +4425,31 @@ export default function Login() {
             </div>
             <button 
               onClick={() => setShowExtensionToast(false)}
+              className="ml-2 text-green-300 hover:text-white"
+            >
+              <XMarkIcon className="h-5 w-5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Add enrichment success toast component at the end of the return statement, just before the closing tags */}
+      <AnimatePresence>
+        {showEnrichmentSuccessToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            transition={{ duration: 0.3 }}
+            className="fixed bottom-5 right-5 bg-green-900/80 border border-green-700 text-green-100 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50"
+          >
+            <CheckCircle className="h-5 w-5 text-green-400" />
+            <div>
+              <p className="font-medium">Enriched File Saved to Exports</p>
+              <p className="text-xs text-green-300 mt-0.5">Your file has been saved and can be accessed anytime in the exports tab</p>
+            </div>
+            <button 
+              onClick={() => setShowEnrichmentSuccessToast(false)}
               className="ml-2 text-green-300 hover:text-white"
             >
               <XMarkIcon className="h-5 w-5" />

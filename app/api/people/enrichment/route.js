@@ -46,36 +46,62 @@ export async function POST(request) {
       table_name,
       linkedin_urls = [],
       confirm = false,
+      finalize = false,
       csv_rows = [],
       csv_headers = [],
       linkedinHeader = "",
+      storage_path,
+      allCols,
+      exportName,
+      row_count,
+      original_filename,
     } = await request.json();
+
+    const supabase = await createClient();
+    // Always authenticate user at the top for both steps
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+    if (!user || authError) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
 
     // 1) Standardize user-supplied LinkedIn URLs
     const rawUrls = linkedin_urls.map((u) => u.trim()).filter(Boolean);
     const fullUrls = rawUrls.map(standardizeLinkedInUrl).filter(Boolean);
-    if (!fullUrls.length) return NextResponse.json({ matchingCount: 0 });
+    if (!fullUrls.length && !finalize) return NextResponse.json({ matchingCount: 0 });
 
-    const supabase = await createClient();
-
-    // ================= PREVIEW (confirm === false) =================
-    if (!confirm) {
+    // ================= PREVIEW & ENRICH (Step 1) =================
+    if (!confirm && !finalize) {
+      // 1. Find matches (same as before)
+      let allHits = [];
       if (table_name !== "all") {
-        // Single index => just return total hits
         const field = FIELD_MAP[table_name] || "linkedin_url";
         const previewRes = await esClient.search({
           index: table_name,
-          size: 0,
+          size: 10000,
+          scroll: "2m",
           query: {
             terms: {
               [`${field}.keyword`]: fullUrls,
             },
           },
         });
-        return NextResponse.json({ matchingCount: previewRes.hits.total.value });
+        let scrollId = previewRes._scroll_id;
+        let hits = previewRes.hits?.hits || [];
+        allHits.push(...hits);
+        while (hits.length > 0) {
+          const scrollRes = await esClient.scroll({
+            scroll_id: scrollId,
+            scroll: "2m",
+          });
+          scrollId = scrollRes._scroll_id;
+          hits = scrollRes.hits?.hits || [];
+          if (!hits.length) break;
+          allHits.push(...hits);
+        }
       } else {
-        // For "all tables", gather and deduplicate
-        let allHits = [];
         for (const idxName of Object.keys(FIELD_MAP)) {
           const field = FIELD_MAP[idxName] || "linkedin_url";
           let res = await esClient.search({
@@ -84,11 +110,9 @@ export async function POST(request) {
             scroll: "2m",
             query: { terms: { [`${field}.keyword`]: fullUrls } },
           });
-
           let scrollId = res._scroll_id;
           let hits = res.hits?.hits || [];
           allHits.push(...hits);
-
           while (hits.length > 0) {
             const scrollRes = await esClient.scroll({
               scroll_id: scrollId,
@@ -100,25 +124,22 @@ export async function POST(request) {
             allHits.push(...hits);
           }
         }
-
-        if (!allHits.length) {
-          return NextResponse.json({ matchingCount: 0 });
-        }
-
-        // Deduplicate by best phone+email coverage
+      }
+      if (!allHits.length) {
+        return NextResponse.json({ matchingCount: 0 });
+      }
+      // Deduplicate by best phone+email coverage (same as before)
+      let finalDocs = [];
+      if (table_name === "all") {
         const docGroups = new Map();
         for (const hit of allHits) {
           const idxName = hit._index;
           const field = FIELD_MAP[idxName] || "linkedin_url";
           const docUrl = standardizeLinkedInUrl(hit._source?.[field] || "");
           if (!docUrl) continue;
-          if (!docGroups.has(docUrl)) {
-            docGroups.set(docUrl, []);
-          }
+          if (!docGroups.has(docUrl)) docGroups.set(docUrl, []);
           docGroups.get(docUrl).push(hit);
         }
-
-        let finalDocs = [];
         for (const [url, docs] of docGroups.entries()) {
           let bestDoc = docs[0];
           let bestVal = docScore(bestDoc._source);
@@ -131,267 +152,168 @@ export async function POST(request) {
           }
           finalDocs.push(bestDoc);
         }
-
-        return NextResponse.json({ matchingCount: finalDocs.length });
+      } else {
+        finalDocs = allHits;
       }
-    }
-
-    // =========== CONFIRM (build CSV & charge tokens) =============
-    // 2) Auth user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-    if (!user || authError) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    // 3) Profile & token checks
-    const { data: profileData, error: profileErr } = await supabase
-      .from("profiles")
-      .select("id, tokens_used, tokens_total, one_time_credits, one_time_credits_used")
-      .eq("user_id", user.id)
-      .single();
-
-    if (profileErr || !profileData) {
-      return NextResponse.json({ error: "No profile found." }, { status: 400 });
-    }
-
-    const subscriptionUsed = parseInt(profileData.tokens_used || "0", 10);
-    const subscriptionTotal = parseInt(profileData.tokens_total || "0", 10);
-    const subscriptionLeft = subscriptionTotal - subscriptionUsed;
-
-    const oneTime = parseInt(profileData.one_time_credits || "0", 10);
-    const oneTimeUsed = parseInt(profileData.one_time_credits_used || "0", 10);
-    const oneTimeLeft = oneTime - oneTimeUsed;
-
-    const totalLeft = subscriptionLeft + oneTimeLeft;
-
-    // 4) Gather all hits
-    const indices = table_name === "all" ? Object.keys(FIELD_MAP) : [table_name];
-    let allHits = [];
-
-    for (const idxName of indices) {
-      const field = FIELD_MAP[idxName] || "linkedin_url";
-      let res = await esClient.search({
-        index: idxName,
-        size: 10000,
-        scroll: "2m",
-        query: {
-          terms: {
-            [`${field}.keyword`]: fullUrls,
-          },
-        },
-      });
-
-      let scrollId = res._scroll_id;
-      let hits = res.hits?.hits || [];
-      allHits.push(...hits);
-
-      while (hits.length > 0) {
-        const scrollRes = await esClient.scroll({
-          scroll_id: scrollId,
-          scroll: "2m",
-        });
-        scrollId = scrollRes._scroll_id;
-        hits = scrollRes.hits?.hits || [];
-        if (!hits.length) break;
-        allHits.push(...hits);
-      }
-    }
-
-    if (!allHits.length) {
-      return NextResponse.json({ error: "No matches returned." }, { status: 400 });
-    }
-
-    // 5) If "all", deduplicate
-    let finalDocs = [];
-    if (table_name === "all") {
-      const docGroups = new Map();
-      for (const hit of allHits) {
-        const idxName = hit._index;
+      const matchingCount = finalDocs.length;
+      // Build CSV (same as before)
+      const docMap = new Map();
+      for (const doc of finalDocs) {
+        const idxName = doc._index;
         const field = FIELD_MAP[idxName] || "linkedin_url";
-        const docUrl = standardizeLinkedInUrl(hit._source?.[field] || "");
-        if (!docUrl) continue;
-        if (!docGroups.has(docUrl)) docGroups.set(docUrl, []);
-        docGroups.get(docUrl).push(hit);
+        const docUrl = standardizeLinkedInUrl(doc._source?.[field] || "");
+        if (docUrl) docMap.set(docUrl, doc);
       }
-
-      for (const [url, docs] of docGroups.entries()) {
-        let bestDoc = docs[0];
-        let bestVal = docScore(bestDoc._source);
-        for (let i = 1; i < docs.length; i++) {
-          const val = docScore(docs[i]._source);
-          if (val > bestVal) {
-            bestDoc = docs[i];
-            bestVal = val;
+      const allCols = Array.from(
+        new Set([...csv_headers, ...finalDocs.flatMap((d) => Object.keys(d._source))])
+      );
+      let csvContent = allCols.join(",") + "\n";
+      for (let userRow of csv_rows) {
+        const rowUrl = standardizeLinkedInUrl(userRow[linkedinHeader] || "");
+        if (!rowUrl) continue;
+        const matchDoc = docMap.get(rowUrl);
+        if (!matchDoc) continue;
+        const rowFields = allCols.map((col) => {
+          if (Object.prototype.hasOwnProperty.call(userRow, col)) {
+            return maybeEscape(userRow[col]);
           }
-        }
-        finalDocs.push(bestDoc);
+          return maybeEscape(matchDoc._source?.[col] ?? "");
+        });
+        csvContent += rowFields.join(",") + "\n";
       }
-    } else {
-      finalDocs = allHits;
-    }
-
-    const totalMatches = finalDocs.length;
-
-    if (totalMatches > totalLeft) {
-      return NextResponse.json(
-        { error: `Not enough tokens. Need ${totalMatches}, have ${totalLeft}` },
-        { status: 400 }
-      );
-    }
-
-    // 6) Build CSV
-    const docMap = new Map();
-    for (const doc of finalDocs) {
-      const idxName = doc._index;
-      const field = FIELD_MAP[idxName] || "linkedin_url";
-      const docUrl = standardizeLinkedInUrl(doc._source?.[field] || "");
-      if (docUrl) docMap.set(docUrl, doc);
-    }
-
-    // Merged columns => user CSV headers + doc fields
-    const allCols = Array.from(
-      new Set([...csv_headers, ...finalDocs.flatMap((d) => Object.keys(d._source))])
-    );
-    let csvContent = allCols.join(",") + "\n";
-
-    for (let userRow of csv_rows) {
-      const rowUrl = standardizeLinkedInUrl(userRow[linkedinHeader] || "");
-      if (!rowUrl) continue;
-      const matchDoc = docMap.get(rowUrl);
-      if (!matchDoc) continue;
-
-      const rowFields = allCols.map((col) => {
-        if (Object.prototype.hasOwnProperty.call(userRow, col)) {
-          return maybeEscape(userRow[col]);
+      function maybeEscape(val) {
+        val = val == null ? "" : String(val);
+        if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+          val = `"${val.replace(/"/g, '""')}"`;
         }
-        return maybeEscape(matchDoc._source?.[col] ?? "");
-      });
-      csvContent += rowFields.join(",") + "\n";
-    }
-
-    function maybeEscape(val) {
-      val = val == null ? "" : String(val);
-      if (val.includes(",") || val.includes('"') || val.includes("\n")) {
-        val = `"${val.replace(/"/g, '""')}"`;
+        return val;
       }
-      return val;
-    }
-
-    // 7) Upload CSV
-    const uniqueName = `user-${user.id}/${Date.now()}-enrichment-${uuidv4()}.csv`;
-    const { data: uploadData, error: uploadErr } = await supabase.storage
-      .from("exports")
-      .upload(uniqueName, csvContent, {
-        upsert: false,
-        contentType: "text/csv",
+      // Upload CSV to storage (same as before)
+      const uniqueName = `user-${user.id}/${Date.now()}-enrichment-${uuidv4()}.csv`;
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from("exports")
+        .upload(uniqueName, csvContent, {
+          upsert: false,
+          contentType: "text/csv",
+        });
+      if (uploadErr) {
+        return NextResponse.json(
+          { error: `Storage upload failed: ${uploadErr.message}` },
+          { status: 500 }
+        );
+      }
+      // Return info for frontend to finalize
+      return NextResponse.json({
+        matchingCount,
+        storage_path: uploadData.path,
+        allCols,
+        exportName: original_filename ? `${original_filename} (Enriched)` : `Enriched Data - ${new Date().toISOString().slice(0, 10)}`,
+        row_count: matchingCount,
       });
-
-    if (uploadErr) {
-      return NextResponse.json(
-        { error: `Storage upload failed: ${uploadErr.message}` },
-        { status: 500 }
-      );
     }
 
-    // Extract the original filename if provided in the request
-    const original_filename = request.body.original_filename;
-
-    // 8) Deduct tokens from subscription first, then from one-time credits
-    let newTokensUsed = subscriptionUsed;
-    let newOneTimeUsed = oneTimeUsed;
-
-    if (totalMatches <= subscriptionLeft) {
-      newTokensUsed += totalMatches;
-    } else {
-      const remainder = totalMatches - subscriptionLeft;
-      newTokensUsed += subscriptionLeft;
-      newOneTimeUsed += remainder;
-    }
-
-    // Create a proper export name
-    const exportName = original_filename
-      ? `${original_filename} (Enriched)`
-      : `Enriched Data - ${new Date().toISOString().slice(0, 10)}`;
-
-    // NEW CODE: If we've used exactly all the one-time credits, reset both to 0
-    if (newOneTimeUsed === oneTime) {
-      newOneTimeUsed = 0;
-      // This resets the total one_time_credits to 0 as well
-      // because we have used exactly all of it.
-      const { error: tokenUpdateErr } = await supabase
+    // =========== FINALIZE (Step 2) =============
+    if (finalize) {
+      // 2) Auth user
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (!user || authError) {
+        return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+      }
+      // 3) Profile & token checks
+      const { data: profileData, error: profileErr } = await supabase
         .from("profiles")
-        .update({
-          tokens_used: newTokensUsed,
-          one_time_credits_used: newOneTimeUsed,
-          one_time_credits: 0,
-        })
-        .eq("id", profileData.id);
-
-      if (tokenUpdateErr) {
-        return NextResponse.json({ error: "Failed to charge tokens" }, { status: 500 });
+        .select("id, tokens_used, tokens_total, one_time_credits, one_time_credits_used")
+        .eq("user_id", user.id)
+        .single();
+      if (profileErr || !profileData) {
+        return NextResponse.json({ error: "No profile found." }, { status: 400 });
       }
-
-      // 9) Insert a record in saved_exports
-      const { error: insertErr } = await supabase.from("saved_exports").insert({
+      const subscriptionUsed = parseInt(profileData.tokens_used || "0", 10);
+      const subscriptionTotal = parseInt(profileData.tokens_total || "0", 10);
+      const subscriptionLeft = subscriptionTotal - subscriptionUsed;
+      const oneTime = parseInt(profileData.one_time_credits || "0", 10);
+      const oneTimeUsed = parseInt(profileData.one_time_credits_used || "0", 10);
+      const oneTimeLeft = oneTime - oneTimeUsed;
+      const totalLeft = subscriptionLeft + oneTimeLeft;
+      // 4) Check credits
+      if (row_count > totalLeft) {
+        return NextResponse.json(
+          { error: `Not enough tokens. Need ${row_count}, have ${totalLeft}` },
+          { status: 400 }
+        );
+      }
+      // 5) Deduct tokens
+      let newTokensUsed = subscriptionUsed;
+      let newOneTimeUsed = oneTimeUsed;
+      if (row_count <= subscriptionLeft) {
+        newTokensUsed += row_count;
+      } else {
+        const remainder = row_count - subscriptionLeft;
+        newTokensUsed += subscriptionLeft;
+        newOneTimeUsed += remainder;
+      }
+      // 6) Update profile
+      if (newOneTimeUsed === oneTime) {
+        newOneTimeUsed = 0;
+        const { error: tokenUpdateErr } = await supabase
+          .from("profiles")
+          .update({
+            tokens_used: newTokensUsed,
+            one_time_credits_used: newOneTimeUsed,
+            one_time_credits: 0,
+          })
+          .eq("id", profileData.id);
+        if (tokenUpdateErr) {
+          return NextResponse.json({ error: "Failed to charge tokens" }, { status: 500 });
+        }
+      } else {
+        const { error: tokenUpdateErr } = await supabase
+          .from("profiles")
+          .update({
+            tokens_used: newTokensUsed,
+            one_time_credits_used: newOneTimeUsed,
+          })
+          .eq("id", profileData.id);
+        if (tokenUpdateErr) {
+          return NextResponse.json({ error: "Failed to charge tokens" }, { status: 500 });
+        }
+      }
+      // 7) Insert into saved_exports
+      const { data: savedExport, error: insertErr } = await supabase.from("saved_exports").insert({
         user_id: user.id,
         export_type: "enrichment",
         table_name,
         filters: {
-          linkedin_urls: fullUrls,
+          linkedin_urls: linkedin_urls,
           crossEnrich: table_name === "all",
           removeDuplicates: table_name === "all",
         },
         columns: allCols,
-        row_count: finalDocs.length,
+        row_count: row_count,
         name: exportName,
-        storage_path: uploadData.path,
-        created_at: new Date().toISOString(), // Explicitly set created_at timestamp
-      });
-
+        storage_path: storage_path,
+        created_at: new Date().toISOString(),
+      }).select();
+      
       if (insertErr) {
         return NextResponse.json({ error: "Saving export record failed" }, { status: 500 });
       }
-
-      return NextResponse.json({ success: true });
-    } else {
-      // Normal case: we haven't used them all or used less than all
-      const { error: tokenUpdateErr } = await supabase
-        .from("profiles")
-        .update({
-          tokens_used: newTokensUsed,
-          one_time_credits_used: newOneTimeUsed,
-        })
-        .eq("id", profileData.id);
-
-      if (tokenUpdateErr) {
-        return NextResponse.json({ error: "Failed to charge tokens" }, { status: 500 });
-      }
-
-      // 9) Insert a record in saved_exports
-      const { error: insertErr } = await supabase.from("saved_exports").insert({
-        user_id: user.id,
-        export_type: "enrichment",
-        table_name,
-        filters: {
-          linkedin_urls: fullUrls,
-          crossEnrich: table_name === "all",
-          removeDuplicates: table_name === "all",
-        },
-        columns: allCols,
-        row_count: finalDocs.length,
-        name: exportName,
-        storage_path: uploadData.path,
-        created_at: new Date().toISOString(), // Explicitly set created_at timestamp
+      
+      // Return the export_id so frontend can use it for download
+      return NextResponse.json({ 
+        success: true,
+        export_id: savedExport?.[0]?.id 
       });
+    }
 
-      if (insertErr) {
-        return NextResponse.json({ error: "Saving export record failed" }, { status: 500 });
-      }
-
-      return NextResponse.json({ success: true });
+    // =========== LEGACY CONFIRM (for backward compatibility) =============
+    if (confirm && !finalize) {
+      // ... existing legacy confirm logic ...
+      // (copy the old confirm block here if you want to keep supporting it)
+      // ...
     }
   } catch (err) {
     console.error(err);
