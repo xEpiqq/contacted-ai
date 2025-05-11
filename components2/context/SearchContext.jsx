@@ -20,6 +20,14 @@ export const SearchContextProvider = ({ children }) => {
   const [manualMode, setManualMode] = useState(false);
   const [creditsScreenOpen, setCreditsScreenOpen] = useState(false);
   
+  /* ---------- guide state ---------- */
+  const [guideOpen, setGuideOpen] = useState(false);
+  
+  /* ---------- search flow states ---------- */
+  const [currentStep, setCurrentStep] = useState(0);
+  const [answerType, setAnswerType] = useState("");
+  const [brainstorm, setBrainstorm] = useState(false);
+  
   /* ---------- drawer states ---------- */
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [exportsDrawerOpen, setExportsDrawerOpen] = useState(false);
@@ -122,6 +130,14 @@ export const SearchContextProvider = ({ children }) => {
     // UI States
     manualMode, setManualMode,
     creditsScreenOpen, setCreditsScreenOpen,
+    
+    // Guide States
+    guideOpen, setGuideOpen,
+    
+    // Search Flow States
+    currentStep, setCurrentStep,
+    answerType, setAnswerType,
+    brainstorm, setBrainstorm,
     
     // Drawer States
     drawerOpen, setDrawerOpen,

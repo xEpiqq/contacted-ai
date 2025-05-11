@@ -4,7 +4,7 @@ import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { CheckCircle } from "lucide-react";
-import { useSearchContext } from "../context/SearchContext";
+import { useSearchContext } from "@/components2/context/SearchContext";
 
 // Generic toast component that takes parameters for customization
 const Toast = ({ headerText, subText, color = "green", onClose }) => {

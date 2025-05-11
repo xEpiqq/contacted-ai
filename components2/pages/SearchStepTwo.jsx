@@ -3,8 +3,8 @@
 import React, { useRef, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowUpIcon, ArrowLeftIcon } from "@heroicons/react/24/outline";
-import Badge from "../elements/Badge";
-import ToggleSwitch from "../elements/ToggleSwitch";
+import { Badge } from "@/components/badge";
+import { Switch } from "@/components/switch";
 
 // Sample data for job titles and business types
 export const jobTitleExamples = [
@@ -300,9 +300,10 @@ function SearchStepTwo({
             brainstorm && shouldAdjustPadding ? "pb-0" : "pb-2"
           } z-10 flex flex-col items-center gap-1`}
         >
-          <ToggleSwitch
-            value={brainstorm}
+          <Switch
+            checked={brainstorm}
             onChange={localHandleBrainstormToggle}
+            color="green"
           />
           <span className="text-[10px] text-neutral-400">brainstorm</span>
         </motion.div>

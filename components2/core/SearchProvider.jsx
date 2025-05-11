@@ -5,14 +5,15 @@ import { SearchContextProvider, useSearchContext } from "../context/SearchContex
 import { AnimatePresence, motion } from "framer-motion";
 import Navbar from "../layout/Navbar";
 import ManualSearch from "../layout/ManualSearch";
-import CreditsScreen from "../modals/CreditsScreen";
+import CreditsScreen from "../layout/CreditsScreen";
+import Guide from "../layout/Guide";
 import SearchStepOne, { closestType } from "../pages/SearchStepOne";
 import SearchStepTwo from "../pages/SearchStepTwo";
 import SearchStepThree from "../pages/SearchStepThree";
 import SearchStepFour from "../pages/SearchStepFour";
 import EnrichmentDrawer from "../layout/EnrichmentDrawer";
 import ExportsDrawer from "../layout/ExportsDrawer";
-import Toasts from "../elements/Toasts";
+import Toasts from "@/components/toasts";
 
 // Component that contains all the main UI and routing
 function SearchApp() {
@@ -21,6 +22,14 @@ function SearchApp() {
     setManualMode,
     creditsScreenOpen,
     setCreditsScreenOpen,
+    guideOpen,
+    setGuideOpen,
+    currentStep,
+    setCurrentStep,
+    answerType,
+    setAnswerType,
+    brainstorm,
+    setBrainstorm,
     drawerOpen,
     exportsDrawerOpen,
     searchResults,
@@ -33,13 +42,10 @@ function SearchApp() {
   } = useSearchContext();
 
   // Local state for search flow
-  const [currentStep, setCurrentStep] = useState(0);
-  const [answerType, setAnswerType] = useState("");
   const [text, setText] = useState("");
   const [selectedExamples, setSelectedExamples] = useState([]);
   const [brainstormExamples, setBrainstormExamples] = useState([]);
   const [selectedIndustries, setSelectedIndustries] = useState([]);
-  const [brainstorm, setBrainstorm] = useState(false);
   const [showExamples, setShowExamples] = useState(true);
   const [showIndustryExamples, setShowIndustryExamples] = useState(true);
   const [exactMatch, setExactMatch] = useState(false);
@@ -289,8 +295,35 @@ function SearchApp() {
   };
 
   return (
-    <div className="w-full flex flex-col bg-[#212121] text-white min-h-screen">
+    <div className="w-full flex flex-col bg-[#212121] text-white min-h-screen relative">
       <Navbar />
+      
+      {/* UI overlay elements that don't affect layout */}
+      <div className="absolute top-0 right-0 bottom-0 left-0 pointer-events-none">
+        {/* Step Badges - only show when not in manual mode */}
+        {!manualMode && currentStep <= 2 && (
+          <div className="fixed top-20 left-4 flex flex-col gap-2 z-10 pointer-events-auto">
+            {[1, 2, 3].map((step) => (
+              <button
+                key={step}
+                onClick={() => step <= currentStep && handleBack(step - 1)}
+                className={`px-3 py-1 rounded-full text-sm ${
+                  step <= currentStep
+                    ? "bg-green-500/20 text-green-700 cursor-pointer hover:bg-green-500/30"
+                    : "bg-gray-500/20 text-gray-500"
+                }`}
+              >
+                Step {step}
+              </button>
+            ))}
+          </div>
+        )}
+        
+        {/* Guide Component */}
+        {!manualMode && (
+          <Guide />
+        )}
+      </div>
       
       {/* Main content area with search or manual search */}
       <AnimatePresence mode="wait">
@@ -304,7 +337,7 @@ function SearchApp() {
           </main>
         )}
       </AnimatePresence>
-      
+
       {/* Credits Screen Modal */}
       <AnimatePresence mode="wait">
         {creditsScreenOpen && (

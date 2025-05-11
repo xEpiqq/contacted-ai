@@ -3,7 +3,7 @@
 import React, { useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { ArrowUpIcon, ArrowLeftIcon } from "@heroicons/react/24/outline";
-import Badge from "../elements/Badge";
+import { Badge } from "@/components/badge";
 
 // Sample industry examples
 export const industryExamples = [
