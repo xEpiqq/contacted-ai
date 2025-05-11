@@ -156,6 +156,11 @@ function SearchApp() {
     // Clear text input when going back
     setText("");
     
+    // Always keep guide open on steps 1 and 2
+    if (targetStep === 1 || targetStep === 2) {
+      setGuideOpen(true);
+    }
+    
     // If going back to step 0, reset everything
     if (targetStep === 0) {
       setAnswerType("");
@@ -318,12 +323,12 @@ function SearchApp() {
             ))}
           </div>
         )}
-        
-        {/* Guide Component */}
-        {!manualMode && (
-          <Guide />
-        )}
       </div>
+      
+      {/* Guide Component - moved outside the pointer-events-none container */}
+      {!manualMode && (
+        <Guide />
+      )}
       
       {/* Main content area with search or manual search */}
       <AnimatePresence mode="wait">

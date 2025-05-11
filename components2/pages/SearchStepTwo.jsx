@@ -156,8 +156,8 @@ function SearchStepTwo({
 
   // Handle keyword selection from suggestions
   const handleSuggestionSelect = (suggestion) => {
-    if (!brainstormExamples.includes(suggestion)) {
-      handleExampleClick(suggestion, true);
+    if (!selectedKeywords.includes(suggestion)) {
+      setSelectedKeywords(prev => [...prev, suggestion]);
     }
   };
 
@@ -168,25 +168,60 @@ function SearchStepTwo({
 
   // Simulate fetching brainstorm suggestions
   const fetchBrainstormSuggestions = (query) => {
-    if (!query.trim()) return;
+    if (!query || !query.trim()) return;
     
     setIsProcessing(true);
+    setShowSuggestions(false);
     
     // Simulate API call delay
     setTimeout(() => {
-      // Mock suggestions based on query
-      const mockSuggestions = [
-        `${query} manager`,
-        `${query} director`,
-        `${query} specialist`,
-        `senior ${query}`,
-        `${query} analyst`,
-        `${query} coordinator`
-      ];
+      let mockSuggestions = [];
+      
+      // Simple keyword-based suggestion logic
+      if (query.toLowerCase().includes("software") || 
+          query.toLowerCase().includes("app") || 
+          query.toLowerCase().includes("tech")) {
+        mockSuggestions = [
+          "Software Engineer",
+          "Product Manager",
+          "CTO",
+          "Technical Lead",
+          "QA Manager",
+        ];
+      } else if (query.toLowerCase().includes("marketing") || 
+                query.toLowerCase().includes("ads") || 
+                query.toLowerCase().includes("brand")) {
+        mockSuggestions = [
+          "Marketing Director",
+          "Brand Manager",
+          "Social Media Specialist",
+          "SEO Expert",
+          "Content Strategist",
+        ];
+      } else if (query.toLowerCase().includes("finance") || 
+                query.toLowerCase().includes("accounting") || 
+                query.toLowerCase().includes("money")) {
+        mockSuggestions = [
+          "CFO",
+          "Financial Analyst",
+          "Accounting Manager",
+          "Controller",
+          "Investment Advisor",
+        ];
+      } else {
+        mockSuggestions = [
+          "CEO",
+          "Operations Manager",
+          "Department Head",
+          "Director of Sales",
+          "HR Manager",
+        ];
+      }
       
       setBrainstormSuggestions(mockSuggestions);
       setIsProcessing(false);
-    }, 1000);
+      setShowSuggestions(true);
+    }, 1500);
   };
 
   // Custom key handler
@@ -207,7 +242,16 @@ function SearchStepTwo({
     // Handle enter to submit
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (canProceed) {
+      
+      if (brainstorm && !showSuggestions && text.trim()) {
+        // Process brainstorm query on Enter when in brainstorm mode and not showing suggestions
+        setBrainstormQuery(text.trim());
+        fetchBrainstormSuggestions(text.trim());
+        setText("");
+        return;
+      }
+      
+      if (canProceed && !brainstorm) {
         handleSubmit(1);
       }
     }
@@ -223,27 +267,11 @@ function SearchStepTwo({
         setText(lastExample);
       }
     }
-    
-    // For brainstorming mode
-    if (brainstorm && showSuggestions) {
-      if (e.key === "Enter" && brainstormQuery.trim()) {
-        e.preventDefault();
-        setSelectedKeywords(prev => [...prev, brainstormQuery.trim()]);
-        fetchBrainstormSuggestions(brainstormQuery.trim());
-        setBrainstormQuery("");
-      }
-    }
   };
 
   // Handle text changes
   const handleTextChange = (e) => {
     const newText = e.target.value;
-    
-    // For brainstorm mode query
-    if (brainstorm && showSuggestions) {
-      setBrainstormQuery(newText);
-      return;
-    }
     
     // Step 2 job titles (people)
     if (answerType === "people") {
@@ -290,17 +318,33 @@ function SearchStepTwo({
     }
   };
   
+  // Handle form submission
+  const handleFormSubmit = (e) => {
+    e.preventDefault();
+    
+    if (brainstorm && !showSuggestions && !isProcessing && text.trim()) {
+      // When in brainstorm mode and text is entered, process for suggestions
+      setBrainstormQuery(text.trim());
+      fetchBrainstormSuggestions(text.trim());
+      setText("");
+      return;
+    }
+    
+    // Only proceed to next step if not in brainstorm mode or if no text entered
+    if (!brainstorm) {
+      handleSubmit(1);
+    }
+  };
+  
   // Handle toggle to brainstorm mode
   const localHandleBrainstormToggle = (value) => {
     setShouldAdjustPadding(value);
-    if (value) {
-      // If turning on brainstorm mode
-      setShowSuggestions(true);
-    } else {
+    if (!value) {
       // If turning off brainstorm mode
       setShowSuggestions(false);
       setBrainstormSuggestions([]);
       setSelectedKeywords([]);
+      setBrainstormQuery("");
     }
     handleBrainstormToggle(value);
   };
@@ -310,29 +354,28 @@ function SearchStepTwo({
     if (!textareaRef.current) return;
     textareaRef.current.style.height = "0px";
     textareaRef.current.style.height = textareaRef.current.scrollHeight + "px";
-  }, [text, brainstormQuery]);
+  }, [text]);
 
-  // Auto-focus textarea when not in brainstorm mode or when showing suggestions
+  // Auto-focus textarea when component mounts
   useEffect(() => {
-    if ((!brainstorm || showSuggestions) && textareaRef.current) {
+    if (textareaRef.current) {
       textareaRef.current.focus();
     }
-  }, [brainstorm, showSuggestions]);
-  
-  // Fetch suggestions when keywords change
-  useEffect(() => {
-    if (selectedKeywords.length > 0) {
-      fetchBrainstormSuggestions(selectedKeywords.join(" "));
-    }
-  }, [selectedKeywords]);
+  }, [brainstorm]);
 
   // Handle next step button click in brainstorm mode
   const handleNextStep = () => {
-    setBrainstormExamples((prev) => [...prev, ...selectedKeywords]);
-    setSelectedKeywords([]);
-    setShowSuggestions(false);
-    setBrainstormSuggestions([]);
-    handleSubmit(1);
+    // Add selected keywords to brainstormExamples
+    if (selectedKeywords.length > 0) {
+      // Instead of using setBrainstormExamples directly, use handleExampleClick for each keyword
+      selectedKeywords.forEach(keyword => {
+        handleExampleClick(keyword, true);
+      });
+      setSelectedKeywords([]);
+      setShowSuggestions(false);
+      setBrainstormSuggestions([]);
+      handleSubmit(1);
+    }
   };
 
   // Get examples for step 2
@@ -398,10 +441,7 @@ function SearchStepTwo({
 
       {/* form */}
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSubmit(1);
-        }}
+        onSubmit={handleFormSubmit}
         className="rounded-3xl bg-[#303030] shadow-sm relative"
       >
         <div className="flex flex-col px-4 py-2">
@@ -418,7 +458,7 @@ function SearchStepTwo({
               ))}
 
             {/* Brainstorm examples */}
-            {answerType === "people" && brainstorm && !showSuggestions &&
+            {answerType === "people" && brainstorm && !showSuggestions && !isProcessing &&
               brainstormExamples.map((example, index) => (
                 <Badge
                   key={index}
@@ -440,12 +480,12 @@ function SearchStepTwo({
               ))}
             
             {/* Text input */}
-            {(!brainstorm || (brainstorm && !showSuggestions)) && (
+            {(!brainstorm || (brainstorm && !showSuggestions && !isProcessing)) && (
               <>
                 <textarea
                   ref={textareaRef}
                   rows={2}
-                  placeholder={`Add ${answerType === "people" ? (brainstorm ? "keywords" : "job titles") : "business types"}`}
+                  placeholder={brainstorm ? "I sell commercial window cleaning services..." : `Add ${answerType === "people" ? "job titles" : "business types"}`}
                   value={text}
                   onChange={handleTextChange}
                   onKeyDown={handleKeyDown}
@@ -466,84 +506,171 @@ function SearchStepTwo({
                 )}
               </>
             )}
-
-            {/* Brainstorm keywords */}
-            {brainstorm && showSuggestions && (
-              <div className="w-full ml-2 mt-1">
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {selectedKeywords.map((keyword, idx) => (
-                    <Badge
-                      key={idx}
-                      onRemove={() => handleKeywordRemove(idx)}
-                    >
-                      {keyword}
-                    </Badge>
-                  ))}
-                </div>
-                
-                <div className="flex gap-2 items-center">
-                  <textarea
-                    ref={textareaRef}
-                    rows={1}
-                    placeholder="Add keywords to see suggestions..."
-                    value={brainstormQuery}
-                    onChange={handleTextChange}
-                    onKeyDown={handleKeyDown}
-                    className="flex-1 resize-none overflow-hidden bg-transparent placeholder:text-neutral-400 text-sm leading-6 outline-none"
-                  />
-                </div>
-                
-                {/* Suggestions grid */}
-                {isProcessing ? (
-                  <div className="mt-3 text-sm text-neutral-400 w-full flex items-center justify-center">
-                    <span className="inline-flex">
-                      Loading
-                      <span className="ml-1">
-                        <span className="wave-dot">.</span>
-                        <span className="wave-dot">.</span>
-                        <span className="wave-dot">.</span>
-                      </span>
-                    </span>
-                  </div>
-                ) : brainstormSuggestions.length > 0 ? (
-                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
-                    {brainstormSuggestions.map((suggestion, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => handleSuggestionSelect(suggestion)}
-                        className="text-left px-2 py-1 text-sm text-neutral-300 hover:bg-[#3a3a3a] rounded transition-colors truncate"
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mt-3 text-sm text-neutral-400">
-                    Add keywords to see suggestions
-                  </div>
-                )}
-              </div>
-            )}
             
-            {/* Submit button */}
-            <button
-              type="submit"
-              disabled={!canProceed}
-              className={`ml-2 h-9 w-9 flex items-center justify-center rounded-full transition-opacity ${
-                canProceed
-                  ? "bg-white text-black hover:opacity-90"
-                  : "bg-neutral-600 text-white cursor-not-allowed opacity-60"
-              }`}
-            >
-              <ArrowUpIcon className="h-5 w-5" />
-            </button>
+            {/* Submit button - Moved to the end of container for right alignment */}
+            <div className="ml-auto">
+              <button
+                type="submit"
+                disabled={(!canProceed && !brainstorm) || (brainstorm && !text.trim() && !showSuggestions && !isProcessing)}
+                className={`h-9 w-9 flex items-center justify-center rounded-full transition-opacity ${
+                  (canProceed && !brainstorm) || (brainstorm && text.trim()) || (brainstorm && (showSuggestions || isProcessing))
+                    ? "bg-white text-black hover:opacity-90"
+                    : "bg-neutral-600 text-white cursor-not-allowed opacity-60"
+                }`}
+              >
+                <ArrowUpIcon className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </div>
       </form>
 
+      {/* Brainstorm processing indicator */}
+      <AnimatePresence mode="wait">
+        {brainstorm && isProcessing && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="mt-4 flex flex-col items-center"
+          >
+            <div className="flex gap-2 items-center">
+              <div className="relative w-5 h-5">
+                <div className="absolute inset-0 rounded-full border-2 border-gray-400 border-t-white animate-spin"></div>
+              </div>
+              <p className="text-sm text-neutral-300">Thinking...</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Container for brainstorm suggestions & selected boxes */}
+      <AnimatePresence>
+        {brainstorm && !isProcessing && showSuggestions && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="mt-4 w-full space-y-4"
+          >
+            {/* Suggestions box */}
+            <div className="bg-[#2b2b2b] border border-[#404040] rounded-xl p-3">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-xs font-medium">
+                  Suggestions based on your input
+                </h3>
+                <button
+                  onClick={() => {
+                    setBrainstormSuggestions([]);
+                    setShowSuggestions(false);
+                  }}
+                  className="text-neutral-400 hover:text-white"
+                >
+                  <XMarkIcon className="h-3 w-3" />
+                </button>
+              </div>
+
+              {brainstormSuggestions.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  {brainstormSuggestions.map((suggestion, i) => (
+                    <motion.button
+                      key={suggestion}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{
+                        opacity: 1,
+                        scale: 1,
+                        transition: { delay: i * 0.05 },
+                      }}
+                      onClick={() => handleSuggestionSelect(suggestion)}
+                      className="flex items-center justify-between px-2 py-1.5 rounded-md bg-[#333333] hover:bg-[#3a3a3a] text-left transition-colors text-xs"
+                    >
+                      <span className="text-sm truncate mr-1">{suggestion}</span>
+                      <span className="text-green-400 text-xs flex-shrink-0">+</span>
+                    </motion.button>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-2 text-center">
+                  <p className="text-xs text-neutral-500 italic">
+                    No suggestions found. Try being more specific about
+                    your target audience.
+                  </p>
+                </div>
+              )}
+
+              {brainstormSuggestions.length > 0 && (
+                <div className="mt-3 pt-2 border-t border-[#404040] text-center">
+                  <p className="text-xs text-neutral-400">
+                    Not seeing what you want? Try being more specific.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Selected job titles box */}
+            <div className="bg-[#252525] border border-[#404040] rounded-xl p-3">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-xs font-medium text-white">
+                  Selected Job Titles
+                </h3>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 min-h-[40px] bg-[#2b2b2b] p-2 rounded-md relative">
+                {selectedKeywords.map((keyword, index) => (
+                  <div
+                    key={index}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-900/30 text-xs text-green-400 border border-green-800/50"
+                  >
+                    {keyword}
+                    <button
+                      type="button"
+                      onClick={() => handleKeywordRemove(index)}
+                      className="text-green-400 hover:text-white ml-0.5"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {selectedKeywords.length === 0 && (
+                  <p className="text-xs text-neutral-500 italic">
+                    No job titles selected yet
+                  </p>
+                )}
+                <button
+                  onClick={handleNextStep}
+                  disabled={selectedKeywords.length === 0}
+                  className={`absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 text-white text-xs font-medium rounded-md transition-colors flex items-center gap-1 ${
+                    selectedKeywords.length > 0
+                      ? "bg-neutral-600 hover:bg-neutral-500"
+                      : "bg-neutral-700 cursor-not-allowed opacity-50"
+                  }`}
+                >
+                  <span>Next Step</span>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-3 w-3"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M14 5l7 7m0 0l-7 7m7-7H3"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Examples section */}
-      {showExamples && !showSuggestions && examples.length > 0 && (
+      {showExamples && !brainstorm && examples.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -582,7 +709,7 @@ function SearchStepTwo({
       )}
 
       {/* Show examples button (when hidden) */}
-      {!showExamples && !showSuggestions && (
+      {!showExamples && !brainstorm && (
         <motion.div layout className="mt-2 text-right">
           <button
             type="button"
@@ -593,65 +720,6 @@ function SearchStepTwo({
           </button>
         </motion.div>
       )}
-
-      {/* Brainstorm processing indicator */}
-      <AnimatePresence mode="wait">
-        {brainstorm && isProcessing && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="mt-4 flex flex-col items-center"
-          >
-            <div className="flex gap-2 items-center">
-              <div className="relative w-5 h-5">
-                <div className="absolute inset-0 rounded-full border-2 border-gray-400 border-t-white animate-spin"></div>
-              </div>
-              <p className="text-sm text-neutral-300">Thinking...</p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Container for brainstorm suggestions & selected boxes */}
-      <AnimatePresence>
-        {brainstorm && !isProcessing && showSuggestions && selectedKeywords.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="mt-3 flex justify-end"
-          >
-            <button
-              onClick={handleNextStep}
-              disabled={selectedKeywords.length === 0}
-              className={`px-3 py-1.5 text-white text-xs font-medium rounded-md transition-colors flex items-center gap-1
-                ${selectedKeywords.length > 0
-                  ? "bg-neutral-600 hover:bg-neutral-500"
-                  : "bg-neutral-700 cursor-not-allowed opacity-50"
-                }`}
-            >
-              <span>Next Step</span>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-3 w-3"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M14 5l7 7m0 0l-7 7m7-7H3"
-                />
-              </svg>
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </motion.div>
   );
 }

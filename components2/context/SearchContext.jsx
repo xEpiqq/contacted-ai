@@ -21,7 +21,7 @@ export const SearchContextProvider = ({ children }) => {
   const [creditsScreenOpen, setCreditsScreenOpen] = useState(false);
   
   /* ---------- guide state ---------- */
-  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(true);
   
   /* ---------- search flow states ---------- */
   const [currentStep, setCurrentStep] = useState(0);
