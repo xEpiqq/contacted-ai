@@ -2,9 +2,50 @@
 
 import React, { useRef, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowUpIcon, ArrowLeftIcon } from "@heroicons/react/24/outline";
-import { Badge } from "@/components/badge";
-import { Switch } from "@/components/switch";
+import { ArrowUpIcon, ArrowLeftIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { BadgeButton } from "@/components/badge";
+
+// Internal Badge component for the comma-separated bubbles
+function Badge({ children, onRemove }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[#2b2b2b] text-sm text-neutral-400"
+    >
+      {children}
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-neutral-500 hover:text-neutral-300"
+      >
+        ×
+      </button>
+    </motion.div>
+  );
+}
+
+// Internal ToggleSwitch component
+function ToggleSwitch({ value, onChange }) {
+  return (
+    <button
+      type="button"
+      aria-label="toggle brainstorm mode"
+      onClick={() => onChange(!value)}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+        value ? "bg-green-500" : "bg-gray-500/50"
+      }`}
+    >
+      <span
+        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+          value ? "translate-x-5" : "translate-x-1"
+        }`}
+      />
+    </button>
+  );
+}
 
 // Sample data for job titles and business types
 export const jobTitleExamples = [
@@ -32,7 +73,14 @@ export const jobTitleExamples = [
   "operations manager",
   "account executive",
   "sales manager",
-  "sales representative"
+  "sales representative",
+  "founder",
+  "associate",
+  "executive assistant",
+  "supervisor",
+  "chief financial officer",
+  
+
 ];
 
 export const localBizExamples = [
@@ -42,6 +90,28 @@ export const localBizExamples = [
   "downtown florist",
   "independent bookstore",
   "pet grooming salon",
+];
+
+// Badge color options - matching pageeee.jsx
+const badgeColors = [
+  "red",
+  "orange",
+  "amber",
+  "yellow",
+  "lime",
+  "green",
+  "emerald",
+  "teal",
+  "cyan",
+  "sky",
+  "blue",
+  "indigo",
+  "violet",
+  "purple",
+  "fuchsia",
+  "pink",
+  "rose",
+  "zinc",
 ];
 
 function SearchStepTwo({
@@ -80,7 +150,7 @@ function SearchStepTwo({
     if (answerType === "people") {
       return brainstorm ? "Brainstorm Job Titles" : "Job Title";
     } else {
-      return "Local Business Type";
+      return "Describe the local biz you're looking for";
     }
   };
 
@@ -175,6 +245,22 @@ function SearchStepTwo({
       return;
     }
     
+    // Step 2 job titles (people)
+    if (answerType === "people") {
+      if (newText.endsWith(",")) {
+        const keyword = newText.slice(0, -1).trim();
+        if (keyword) {
+          if (brainstorm) {
+            handleExampleClick(keyword, true);
+          } else {
+            handleExampleClick(keyword);
+          }
+          setText("");
+        }
+        return;
+      }
+    }
+    
     setText(newText);
     
     // Handle auto-suggestion for job titles
@@ -240,6 +326,15 @@ function SearchStepTwo({
     }
   }, [selectedKeywords]);
 
+  // Handle next step button click in brainstorm mode
+  const handleNextStep = () => {
+    setBrainstormExamples((prev) => [...prev, ...selectedKeywords]);
+    setSelectedKeywords([]);
+    setShowSuggestions(false);
+    setBrainstormSuggestions([]);
+    handleSubmit(1);
+  };
+
   // Get examples for step 2
   const examples = answerType === "local biz" ? localBizExamples : jobTitleExamples;
 
@@ -279,35 +374,27 @@ function SearchStepTwo({
               Brainstorm job titles
             </p>
           )}
-          <div className="w-full flex justify-center">
+          <div className="w-full flex justify-center relative">
             <h1 className="text-3xl sm:text-2xl font-medium">
               {getHeadingText()}
               {answerType === "people" && !brainstorm && (
                 <span className="text-neutral-500">(s)</span>
               )}
             </h1>
+            
+            {/* toggle switch for brainstorm mode */}
+            {answerType === "people" && (
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 flex flex-col items-center">
+                <ToggleSwitch
+                  value={brainstorm}
+                  onChange={localHandleBrainstormToggle}
+                />
+                <span className="text-[10px] text-neutral-400 mt-1">brainstorm</span>
+              </div>
+            )}
           </div>
         </motion.div>
       </AnimatePresence>
-
-      {/* toggle switch for brainstorm mode */}
-      {answerType === "people" && !showSuggestions && !isProcessing && !brainstormQuery && (
-        <motion.div
-          initial={{ x: 100, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className={`absolute right-0 bottom-16 ${
-            brainstorm && shouldAdjustPadding ? "pb-0" : "pb-2"
-          } z-10 flex flex-col items-center gap-1`}
-        >
-          <Switch
-            checked={brainstorm}
-            onChange={localHandleBrainstormToggle}
-            color="green"
-          />
-          <span className="text-[10px] text-neutral-400">brainstorm</span>
-        </motion.div>
-      )}
 
       {/* form */}
       <form
@@ -455,7 +542,7 @@ function SearchStepTwo({
         </div>
       </form>
 
-      {/* Examples */}
+      {/* Examples section */}
       {showExamples && !showSuggestions && examples.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -463,30 +550,108 @@ function SearchStepTwo({
           transition={{ delay: 0.1 }}
           className="mt-3"
         >
-          <div className="flex justify-between items-center text-xs text-neutral-500 mb-1">
-            <span>examples</span>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {examples
+              .filter(example => {
+                // Filter out examples that are already selected
+                const isSelected = brainstorm
+                  ? brainstormExamples.includes(example)
+                  : selectedExamples.includes(example);
+                return !isSelected;
+              })
+              .map((example, idx) => (
+                <BadgeButton
+                  key={idx}
+                  color={badgeColors[idx % badgeColors.length]}
+                  onClick={() => handleExampleClick(example)}
+                >
+                  {example}
+                </BadgeButton>
+              ))}
+          </div>
+          <div className="mt-2">
             <button
               type="button"
               onClick={() => setShowExamples(false)}
-              className="text-neutral-500 hover:text-neutral-300"
+              className="text-xs text-neutral-400 hover:text-neutral-300"
             >
-              hide
+              hide examples
             </button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {examples.slice(0, 6).map((example, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleExampleClick(example)}
-                className="px-2 py-1 bg-[#2b2b2b] hover:bg-[#3a3a3a] rounded-full text-sm text-neutral-400 transition-colors"
-              >
-                {example}
-              </button>
-            ))}
           </div>
         </motion.div>
       )}
+
+      {/* Show examples button (when hidden) */}
+      {!showExamples && !showSuggestions && (
+        <motion.div layout className="mt-2 text-right">
+          <button
+            type="button"
+            onClick={() => setShowExamples(true)}
+            className="text-xs text-neutral-400 hover:text-neutral-300"
+          >
+            show examples
+          </button>
+        </motion.div>
+      )}
+
+      {/* Brainstorm processing indicator */}
+      <AnimatePresence mode="wait">
+        {brainstorm && isProcessing && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="mt-4 flex flex-col items-center"
+          >
+            <div className="flex gap-2 items-center">
+              <div className="relative w-5 h-5">
+                <div className="absolute inset-0 rounded-full border-2 border-gray-400 border-t-white animate-spin"></div>
+              </div>
+              <p className="text-sm text-neutral-300">Thinking...</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Container for brainstorm suggestions & selected boxes */}
+      <AnimatePresence>
+        {brainstorm && !isProcessing && showSuggestions && selectedKeywords.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="mt-3 flex justify-end"
+          >
+            <button
+              onClick={handleNextStep}
+              disabled={selectedKeywords.length === 0}
+              className={`px-3 py-1.5 text-white text-xs font-medium rounded-md transition-colors flex items-center gap-1
+                ${selectedKeywords.length > 0
+                  ? "bg-neutral-600 hover:bg-neutral-500"
+                  : "bg-neutral-700 cursor-not-allowed opacity-50"
+                }`}
+            >
+              <span>Next Step</span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-3 w-3"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M14 5l7 7m0 0l-7 7m7-7H3"
+                />
+              </svg>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
