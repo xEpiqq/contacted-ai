@@ -4,7 +4,21 @@ import React, { useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import { ArrowUpIcon, ArrowLeftIcon } from "@heroicons/react/24/outline";
 import Badge from "../elements/Badge";
-import { industryExamples } from "../core/utils";
+
+// Sample industry examples
+export const industryExamples = [
+  "software",
+  "healthcare",
+  "finance",
+  "manufacturing",
+  "education",
+  "retail",
+  "construction",
+  "hospitality",
+  "renewable energy",
+  "transportation",
+  "agriculture",
+];
 
 function SearchStepThree({
   text,
@@ -16,20 +30,26 @@ function SearchStepThree({
   handleExampleClick,
   handleBadgeRemove,
   showIndustryExamples,
-  setShowIndustryExamples,
+  setShowIndustryExamples
 }) {
-  // Local heading text - always "Industry" for this step
-  const headingText = "Industry";
-
-  // References
+  // Reference for textarea auto-grow
   const textareaRef = useRef(null);
 
-  // Handle text changes
-  const handleTextChange = (e) => {
-    setText(e.target.value);
-  };
+  // Auto-grow textarea height
+  useEffect(() => {
+    if (!textareaRef.current) return;
+    textareaRef.current.style.height = "0px";
+    textareaRef.current.style.height = textareaRef.current.scrollHeight + "px";
+  }, [text]);
 
-  // Handle key events
+  // Auto-focus the textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, []);
+
+  // Handle key presses
   const handleKeyDown = (e) => {
     // Handle enter to submit
     if (e.key === "Enter" && !e.shiftKey) {
@@ -51,18 +71,6 @@ function SearchStepThree({
     }
   };
 
-  // Auto-grow textarea height
-  useEffect(() => {
-    if (!textareaRef.current) return;
-    textareaRef.current.style.height = "0px";
-    textareaRef.current.style.height = textareaRef.current.scrollHeight + "px";
-  }, [text]);
-
-  // Auto-focus textarea
-  useEffect(() => {
-    textareaRef.current?.focus();
-  }, []);
-
   return (
     <motion.div
       key="search-step-three"
@@ -83,31 +91,20 @@ function SearchStepThree({
       </button>
 
       {/* heading */}
-      <motion.div
-        key={`heading-${headingText}`}
-        className="flex flex-col items-center gap-2 mb-4 relative z-0"
-        initial={{ x: 100, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        exit={{ x: -100, opacity: 0 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-      >
-        <p className="absolute -top-6 left-1/2 -translate-x-1/2 text-center text-sm text-neutral-400">
-          Add industries
-        </p>
-        <div className="w-full flex justify-center">
-          <h1 className="text-3xl sm:text-2xl font-medium">
-            {headingText}
-          </h1>
-        </div>
-      </motion.div>
+      <div className="flex flex-col items-center gap-2 mb-4">
+        <h1 className="text-3xl sm:text-2xl font-medium">
+          Industry
+          <span className="text-neutral-500">(optional)</span>
+        </h1>
+      </div>
 
-      {/* form */}
+      {/* input form */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
           handleSubmit(2);
         }}
-        className="rounded-3xl bg-[#303030] shadow-sm relative"
+        className="rounded-3xl bg-[#303030] shadow-sm"
       >
         <div className="flex flex-col px-4 py-2">
           <div className="flex items-center flex-wrap gap-2">
@@ -124,14 +121,14 @@ function SearchStepThree({
             {/* Text input */}
             <textarea
               ref={textareaRef}
-              rows={2}
-              placeholder="Add industries (optional)"
+              rows={1}
+              placeholder="Add industries (e.g. technology, healthcare)"
               value={text}
-              onChange={handleTextChange}
+              onChange={(e) => setText(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="flex-1 ml-2 resize-none overflow-hidden bg-transparent placeholder:text-neutral-400 text-sm leading-6 outline-none min-w-[160px]"
+              className="flex-1 ml-2 resize-none overflow-hidden bg-transparent placeholder:text-neutral-400 text-sm leading-6 outline-none min-w-[200px]"
             />
-
+            
             {/* Submit button */}
             <button
               type="submit"
@@ -148,7 +145,7 @@ function SearchStepThree({
         </div>
       </form>
 
-      {/* Industry examples */}
+      {/* Examples */}
       {showIndustryExamples && industryExamples.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}

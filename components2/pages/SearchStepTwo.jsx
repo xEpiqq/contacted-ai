@@ -1,12 +1,48 @@
 "use client";
 
 import React, { useRef, useEffect, useState } from "react";
-import { useSearchContext } from "../context/SearchContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowUpIcon, ArrowLeftIcon } from "@heroicons/react/24/outline";
 import Badge from "../elements/Badge";
 import ToggleSwitch from "../elements/ToggleSwitch";
-import { jobTitleExamples, localBizExamples } from "../core/utils";
+
+// Sample data for job titles and business types
+export const jobTitleExamples = [
+  "owner",
+  "president",
+  "teacher",
+  "manager",
+  "chief executive officer",
+  "project manager",
+  "registered nurse",
+  "vice president",
+  "office manager",
+  "director",
+  "administrative assistant",
+  "realtor",
+  "general manager",
+  "partner",
+  "principal",
+  "sales",
+  "consultant",
+  "account manager",
+  "attorney",
+  "software engineer",
+  "executive director",
+  "operations manager",
+  "account executive",
+  "sales manager",
+  "sales representative"
+];
+
+export const localBizExamples = [
+  "local coffee shop",
+  "family-owned bakery",
+  "neighborhood gym",
+  "downtown florist",
+  "independent bookstore",
+  "pet grooming salon",
+];
 
 function SearchStepTwo({
   text,
@@ -24,18 +60,15 @@ function SearchStepTwo({
   showExamples,
   setShowExamples,
 }) {
-  const {
-    shouldAdjustPadding,
-    isProcessing,
-    showSuggestions,
-    brainstormSuggestions,
-    brainstormQuery,
-    selectedKeywords,
-    handleSuggestionSelect,
-    handleKeywordRemove
-  } = useSearchContext();
-
-  // Local state
+  // Local state for brainstorming
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [brainstormSuggestions, setBrainstormSuggestions] = useState([]);
+  const [brainstormQuery, setBrainstormQuery] = useState("");
+  const [selectedKeywords, setSelectedKeywords] = useState([]);
+  const [shouldAdjustPadding, setShouldAdjustPadding] = useState(false);
+  
+  // Local state for suggestions
   const [suggestion, setSuggestion] = useState("");
   const [suggestActive, setSuggestActive] = useState(false);
 
@@ -49,6 +82,41 @@ function SearchStepTwo({
     } else {
       return "Local Business Type";
     }
+  };
+
+  // Handle keyword selection from suggestions
+  const handleSuggestionSelect = (suggestion) => {
+    if (!brainstormExamples.includes(suggestion)) {
+      handleExampleClick(suggestion, true);
+    }
+  };
+
+  // Handle keyword removal
+  const handleKeywordRemove = (idx) => {
+    setSelectedKeywords(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // Simulate fetching brainstorm suggestions
+  const fetchBrainstormSuggestions = (query) => {
+    if (!query.trim()) return;
+    
+    setIsProcessing(true);
+    
+    // Simulate API call delay
+    setTimeout(() => {
+      // Mock suggestions based on query
+      const mockSuggestions = [
+        `${query} manager`,
+        `${query} director`,
+        `${query} specialist`,
+        `senior ${query}`,
+        `${query} analyst`,
+        `${query} coordinator`
+      ];
+      
+      setBrainstormSuggestions(mockSuggestions);
+      setIsProcessing(false);
+    }, 1000);
   };
 
   // Custom key handler
@@ -85,11 +153,28 @@ function SearchStepTwo({
         setText(lastExample);
       }
     }
+    
+    // For brainstorming mode
+    if (brainstorm && showSuggestions) {
+      if (e.key === "Enter" && brainstormQuery.trim()) {
+        e.preventDefault();
+        setSelectedKeywords(prev => [...prev, brainstormQuery.trim()]);
+        fetchBrainstormSuggestions(brainstormQuery.trim());
+        setBrainstormQuery("");
+      }
+    }
   };
 
   // Handle text changes
   const handleTextChange = (e) => {
     const newText = e.target.value;
+    
+    // For brainstorm mode query
+    if (brainstorm && showSuggestions) {
+      setBrainstormQuery(newText);
+      return;
+    }
+    
     setText(newText);
     
     // Handle auto-suggestion for job titles
@@ -118,13 +203,28 @@ function SearchStepTwo({
       }
     }
   };
+  
+  // Handle toggle to brainstorm mode
+  const localHandleBrainstormToggle = (value) => {
+    setShouldAdjustPadding(value);
+    if (value) {
+      // If turning on brainstorm mode
+      setShowSuggestions(true);
+    } else {
+      // If turning off brainstorm mode
+      setShowSuggestions(false);
+      setBrainstormSuggestions([]);
+      setSelectedKeywords([]);
+    }
+    handleBrainstormToggle(value);
+  };
 
   // Auto-grow textarea height
   useEffect(() => {
     if (!textareaRef.current) return;
     textareaRef.current.style.height = "0px";
     textareaRef.current.style.height = textareaRef.current.scrollHeight + "px";
-  }, [text]);
+  }, [text, brainstormQuery]);
 
   // Auto-focus textarea when not in brainstorm mode or when showing suggestions
   useEffect(() => {
@@ -132,6 +232,13 @@ function SearchStepTwo({
       textareaRef.current.focus();
     }
   }, [brainstorm, showSuggestions]);
+  
+  // Fetch suggestions when keywords change
+  useEffect(() => {
+    if (selectedKeywords.length > 0) {
+      fetchBrainstormSuggestions(selectedKeywords.join(" "));
+    }
+  }, [selectedKeywords]);
 
   // Get examples for step 2
   const examples = answerType === "local biz" ? localBizExamples : jobTitleExamples;
@@ -195,7 +302,7 @@ function SearchStepTwo({
         >
           <ToggleSwitch
             value={brainstorm}
-            onChange={handleBrainstormToggle}
+            onChange={localHandleBrainstormToggle}
           />
           <span className="text-[10px] text-neutral-400">brainstorm</span>
         </motion.div>

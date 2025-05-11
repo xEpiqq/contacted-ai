@@ -5,7 +5,7 @@ import { useSearchContext } from "../context/SearchContext";
 import { motion } from "framer-motion";
 import { Search, Download, CheckCircle, Loader } from "lucide-react";
 
-function ResultsDisplay({ handleResetSearch }) {
+function ResultsDisplay({ handleResetSearch, answerType }) {
   const {
     searchFilters,
     searchResults,
@@ -14,8 +14,7 @@ function ResultsDisplay({ handleResetSearch }) {
     totalResults,
     totalPages,
     fetchExports,
-    searchLimit,
-    answerType
+    searchLimit
   } = useSearchContext();
 
   // Display columns for the simpler format

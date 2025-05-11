@@ -6,14 +6,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import Navbar from "../layout/Navbar";
 import ManualSearch from "../layout/ManualSearch";
 import CreditsScreen from "../modals/CreditsScreen";
-import SearchStepOne from "../pages/SearchStepOne";
+import SearchStepOne, { closestType } from "../pages/SearchStepOne";
 import SearchStepTwo from "../pages/SearchStepTwo";
 import SearchStepThree from "../pages/SearchStepThree";
-import ResultsDisplay from "../layout/ResultsDisplay";
+import SearchStepFour from "../pages/SearchStepFour";
+import EnrichmentDrawer from "../layout/EnrichmentDrawer";
+import ExportsDrawer from "../layout/ExportsDrawer";
 import Toasts from "../elements/Toasts";
-import DrawerManager from "../layout/DrawerManager";
-import { tooltipStyles, tableScrollbarStyles } from "../core/utils";
-import { closestType } from "../core/utils";
 
 // Component that contains all the main UI and routing
 function SearchApp() {
@@ -30,8 +29,7 @@ function SearchApp() {
     setTotalResults,
     searchFilters,
     setSearchFilters,
-    resultsLoading,
-    setResultsLoading
+    searchLimit
   } = useSearchContext();
 
   // Local state for search flow
@@ -45,6 +43,7 @@ function SearchApp() {
   const [showExamples, setShowExamples] = useState(true);
   const [showIndustryExamples, setShowIndustryExamples] = useState(true);
   const [exactMatch, setExactMatch] = useState(false);
+  const [resultsLoading, setResultsLoading] = useState(false);
   
   // Text input helpers
   const hasText = text.trim().length > 0;
@@ -273,8 +272,13 @@ function SearchApp() {
           setShowIndustryExamples={setShowIndustryExamples}
         />;
       case 3:
-        return <ResultsDisplay 
+        return <SearchStepFour 
           handleResetSearch={handleResetSearch}
+          answerType={answerType}
+          searchFilters={searchFilters}
+          searchResults={searchResults}
+          totalResults={totalResults}
+          searchLimit={searchLimit}
         />;
       default:
         return <SearchStepOne 
@@ -308,43 +312,12 @@ function SearchApp() {
         )}
       </AnimatePresence>
       
-      {/* Drawers for enrichment, exports, etc. */}
-      <DrawerManager />
+      {/* Drawers */}
+      <EnrichmentDrawer />
+      <ExportsDrawer />
       
       {/* Toast notifications */}
       <Toasts />
-      
-      {/* Global CSS styles */}
-      <style jsx global>{`
-        .thin-scrollbar::-webkit-scrollbar {
-          width: 6px;
-          height: 6px;
-        }
-        
-        .thin-scrollbar::-webkit-scrollbar-track {
-          background: rgba(26, 26, 26, 0.1);
-          border-radius: 4px;
-        }
-        
-        .thin-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(90, 90, 90, 0.5);
-          border-radius: 4px;
-        }
-        
-        .thin-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(110, 110, 110, 0.6);
-        }
-        
-        /* For Firefox */
-        .thin-scrollbar {
-          scrollbar-width: thin;
-          scrollbar-color: rgba(90, 90, 90, 0.5) rgba(26, 26, 26, 0.1);
-        }
-        
-        ${tooltipStyles}
-        
-        ${tableScrollbarStyles}
-      `}</style>
     </div>
   );
 }

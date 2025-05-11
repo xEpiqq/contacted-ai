@@ -18,14 +18,16 @@ const EnrichmentDrawer = () => {
   // Refs
   const fileInputRef = useRef(null);
   
-  // State from context
+  // Only get the absolutely necessary state from context
   const {
     drawerOpen,
     setDrawerOpen,
-    setShowEnrichmentSuccessToast
+    setToastConfig,
+    creditsRemaining,
+    setCreditsRemaining
   } = useSearchContext();
   
-  // Local state
+  // Local state - moved from context
   const [uploadStep, setUploadStep] = useState(0); // 0: upload, 1: columns, 2: settings
   const [csvData, setCsvData] = useState(null);
   const [csvColumns, setCsvColumns] = useState([]);
@@ -376,10 +378,12 @@ const EnrichmentDrawer = () => {
         }
 
         // Show toast notification before closing drawer
-        if (setShowEnrichmentSuccessToast) {
-          setShowEnrichmentSuccessToast(true);
-          setTimeout(() => setShowEnrichmentSuccessToast(false), 5000);
-        }
+        setToastConfig({
+          headerText: "Enriched File Saved to Exports",
+          subText: "Your file has been saved and can be accessed anytime in the exports tab",
+          color: "green"
+        });
+        setTimeout(() => setToastConfig(null), 5000);
         
         // Close drawer after short delay
         setTimeout(() => {
