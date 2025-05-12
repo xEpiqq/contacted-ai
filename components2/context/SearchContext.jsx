@@ -21,7 +21,7 @@ export const SearchContextProvider = ({ children }) => {
   const [creditsScreenOpen, setCreditsScreenOpen] = useState(false);
   
   /* ---------- guide state ---------- */
-  const [guideOpen, setGuideOpen] = useState(true);
+  // Removed guideOpen and setGuideOpen since we're handling it in the Guide component
   
   /* ---------- search flow states ---------- */
   const [currentStep, setCurrentStep] = useState(0);
@@ -131,8 +131,7 @@ export const SearchContextProvider = ({ children }) => {
     manualMode, setManualMode,
     creditsScreenOpen, setCreditsScreenOpen,
     
-    // Guide States
-    guideOpen, setGuideOpen,
+    // Guide States removed
     
     // Search Flow States
     currentStep, setCurrentStep,

@@ -22,8 +22,6 @@ function SearchApp() {
     setManualMode,
     creditsScreenOpen,
     setCreditsScreenOpen,
-    guideOpen,
-    setGuideOpen,
     currentStep,
     setCurrentStep,
     answerType,
@@ -51,6 +49,9 @@ function SearchApp() {
   const [exactMatch, setExactMatch] = useState(false);
   const [resultsLoading, setResultsLoading] = useState(false);
   
+  // Guide state
+  const [guideOpen, setGuideOpen] = useState(false);
+  
   // Text input helpers
   const hasText = text.trim().length > 0;
   const hasBadges = 
@@ -68,6 +69,7 @@ function SearchApp() {
     setCurrentStep(1);
     setText("");
     setShowExamples(true);
+    setGuideOpen(true);
   };
 
   // Handle text submission 
@@ -100,6 +102,11 @@ function SearchApp() {
     // Move to next step or submit search
     if (step < 2) {
       setCurrentStep(step + 1);
+      
+      // If moving from step 0 to step 1, guide should open in step 1
+      if (step === 0) {
+        setGuideOpen(true);
+      }
     } else {
       // Final step - trigger search
       handleSearch();
@@ -156,13 +163,12 @@ function SearchApp() {
     // Clear text input when going back
     setText("");
     
-    // Always keep guide open on steps 1 and 2
-    if (targetStep === 1 || targetStep === 2) {
-      setGuideOpen(true);
-    }
-    
-    // If going back to step 0, reset everything
-    if (targetStep === 0) {
+    // Set guide state when going backwards
+    if (targetStep === 1) {
+      setGuideOpen(true); // Open guide when going back to step 2 (page 2)
+    } else if (targetStep === 0) {
+      // If going back to step 0, reset everything
+      setGuideOpen(false);
       setAnswerType("");
       setSelectedExamples([]);
       setBrainstormExamples([]);
@@ -244,6 +250,237 @@ function SearchApp() {
     setExactMatch(false);
   };
 
+  // Guide content functions
+  // Step 1 - Search Type Guide
+  const Step1GuideContent = () => (
+    <>
+      <div>
+        <p className="font-medium">
+          1. Multiple job titles? use commas
+        </p>
+        <p className="text-neutral-400 text-xs mt-0.5 italic">
+          ceo, owner, founder
+        </p>
+      </div>
+
+      <div>
+        <p className="font-medium">
+          2. Want an exact match? use quotes
+        </p>
+
+        <div className="bg-[#1f1f1f] border border-[#404040] rounded-md p-2 text-[11px] text-neutral-300">
+          <p>
+            type{" "}
+            <code className="px-1 py-0.5 bg-[#2c2c2c] rounded">
+              ceo
+            </code>{" "}
+            (no quotes) and you might find a man whose title is{" "}
+            <code className="px-1 py-0.5 bg-[#2c2c2c] rounded">
+              'best ceo ever'
+            </code>
+          </p>
+        </div>
+        <div className="mt-2 space-y-1">
+          <div className="bg-[#1f1f1f] border border-[#404040] rounded-md p-2 text-[11px] text-neutral-300">
+            <p>
+              type{" "}
+              <code className="px-1 py-0.5 bg-[#2c2c2c] rounded">
+                "ceo"
+              </code>{" "}
+              and every person will have the exact title of{" "}
+              <code className="px-1 py-0.5 bg-[#2c2c2c] rounded">
+                "ceo"
+              </code>
+            </p>
+          </div>
+          <p className="text-neutral-400 text-xs mt-2 italic">
+            "ceo", "owner", "founder" is allowed
+          </p>
+        </div>
+      </div>
+    </>
+  );
+
+  // Step 2 - Brainstorm Guide
+  const BrainstormGuideContent = () => (
+    <>
+      <div>
+        <p className="font-medium">Brainstorm with AI</p>
+        <ul className="text-xs text-neutral-400 mt-2 space-y-2">
+          <li className="flex gap-2">
+            <span>1.</span>
+            <p>Describe your product or service</p>
+          </li>
+          <li className="flex gap-2">
+            <span>2.</span>
+            <p>AI will suggest relevant job titles</p>
+          </li>
+          <li className="flex gap-2">
+            <span>3.</span>
+            <p>Select titles you want to target</p>
+          </li>
+          <li className="flex gap-2">
+            <span>4.</span>
+            <p>Add them to your search with one click</p>
+          </li>
+        </ul>
+      </div>
+
+      <div className="bg-[#1f1f1f] border border-[#404040] rounded-md p-2 text-[11px] text-green-400">
+        <p>
+          <span className="font-medium">Pro tip:</span> Be
+          specific about your customers. The more detailed you
+          are, the better the AI suggestions will be.
+        </p>
+      </div>
+    </>
+  );
+
+  // Step 2 - Job Titles Guide
+  const JobTitlesGuideContent = () => (
+    <>
+      <div>
+        <p className="font-medium">
+          1. Multiple job titles? use commas
+        </p>
+        <p className="text-neutral-400 text-xs mt-0.5 italic">
+          ceo, owner, founder
+        </p>
+      </div>
+
+      <div>
+        <p className="font-medium">
+          2. Want an exact match? use quotes
+        </p>
+
+        <div className="bg-[#1f1f1f] border border-[#404040] rounded-md p-2 text-[11px] text-neutral-300">
+          <p>
+            type{" "}
+            <code className="px-1 py-0.5 bg-[#2c2c2c] rounded">
+              ceo
+            </code>{" "}
+            (no quotes) and you might find a man whose title is{" "}
+            <code className="px-1 py-0.5 bg-[#2c2c2c] rounded">
+              'best ceo ever'
+            </code>
+          </p>
+        </div>
+        <div className="mt-2 space-y-1">
+          <div className="bg-[#1f1f1f] border border-[#404040] rounded-md p-2 text-[11px] text-neutral-300">
+            <p>
+              type{" "}
+              <code className="px-1 py-0.5 bg-[#2c2c2c] rounded">
+                "ceo"
+              </code>{" "}
+              and every person will have the exact title of{" "}
+              <code className="px-1 py-0.5 bg-[#2c2c2c] rounded">
+                "ceo"
+              </code>
+            </p>
+          </div>
+          <p className="text-neutral-400 text-xs mt-2 italic">
+            "ceo", "owner", "founder" is allowed
+          </p>
+        </div>
+      </div>
+    </>
+  );
+
+  // Step 3 - Industry Guide
+  const IndustryGuideContent = () => (
+    <>
+      <div>
+        <p className="font-medium">
+          1. Multiple industries? use commas
+        </p>
+        <p className="text-neutral-400 text-xs mt-0.5 italic">
+          software, healthcare, finance
+        </p>
+      </div>
+      <div>
+        <p className="font-medium">
+          2. Think broadly or get specific
+        </p>
+        <p className="text-neutral-400 text-xs mt-0.5">
+          e.g. renewable energy <span className="italic">vs.</span>{" "}
+          solar panel installers
+        </p>
+      </div>
+    </>
+  );
+
+  // Step 4 - Results Guide
+  const ResultsGuideContent = () => (
+    <>
+      <div>
+        <p className="font-medium">Understanding Your Results</p>
+        <ul className="text-xs text-neutral-400 mt-2 space-y-2">
+          <li className="flex gap-2">
+            <span>•</span>
+            <p>Results are shown based on your search criteria</p>
+          </li>
+          <li className="flex gap-2">
+            <span>•</span>
+            <p>Up to {searchLimit} results are shown per page</p>
+          </li>
+          <li className="flex gap-2">
+            <span>•</span>
+            <p>Use pagination to navigate through results</p>
+          </li>
+        </ul>
+      </div>
+
+      <div className="bg-[#1f1f1f] border border-[#404040] rounded-md p-2 text-[11px] text-neutral-300 mt-3">
+        <p>
+          <span className="font-medium">Pro tip:</span> You can export your 
+          results in various formats. Click "Export Results" to download.
+        </p>
+      </div>
+    </>
+  );
+
+  // Helper to determine which guide content to show
+  const getGuideContent = () => {
+    if (currentStep === 0) {
+      return {
+        title: "Search Type Guide",
+        content: <Step1GuideContent />
+      };
+    } else if (currentStep === 1) {
+      if (brainstorm) {
+        return {
+          title: "Brainstorm Guide",
+          content: <BrainstormGuideContent />
+        };
+      } else {
+        return {
+          title: "Job Title Guide",
+          content: <JobTitlesGuideContent />
+        };
+      }
+    } else if (currentStep === 2) {
+      return {
+        title: "Industry Guide",
+        content: <IndustryGuideContent />
+      };
+    } else if (currentStep === 3) {
+      return {
+        title: "Results Guide",
+        content: <ResultsGuideContent />
+      };
+    }
+  };
+
+  // Determine if guide should be open by default for current step
+  useEffect(() => {
+    // Open guide automatically for steps 2 and 3 (pages 2 and 3), closed for others
+    if (currentStep === 1 || currentStep === 2) {
+      setGuideOpen(true);
+    } else {
+      setGuideOpen(false);
+    }
+  }, [currentStep]);
+
   // Render the appropriate step component based on currentStep
   const renderSearchStep = () => {
     const commonProps = {
@@ -303,6 +540,16 @@ function SearchApp() {
     <div className="w-full flex flex-col bg-[#212121] text-white min-h-screen relative">
       <Navbar />
       
+      {/* Global Guide component */}
+      {!manualMode && getGuideContent() && (
+        <Guide 
+          isVisible={true}
+          defaultOpen={guideOpen}
+          title={getGuideContent().title}
+          primaryContent={getGuideContent().content}
+        />
+      )}
+      
       {/* UI overlay elements that don't affect layout */}
       <div className="absolute top-0 right-0 bottom-0 left-0 pointer-events-none">
         {/* Step Badges - only show when not in manual mode */}
@@ -324,11 +571,6 @@ function SearchApp() {
           </div>
         )}
       </div>
-      
-      {/* Guide Component - moved outside the pointer-events-none container */}
-      {!manualMode && (
-        <Guide />
-      )}
       
       {/* Main content area with search or manual search */}
       <AnimatePresence mode="wait">
