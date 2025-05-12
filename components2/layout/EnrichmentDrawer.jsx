@@ -35,6 +35,7 @@ const EnrichmentDrawer = () => {
   const [autoDetectedColumn, setAutoDetectedColumn] = useState(null);
   const [uploadError, setUploadError] = useState("");
   const [enrichLoading, setEnrichLoading] = useState(false);
+  const [backgroundEnrichment, setBackgroundEnrichment] = useState(false); // Track background enrichment
   const [matchingCount, setMatchingCount] = useState(null);
   const [matchingResult, setMatchingResult] = useState(null); // Store full result from API
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -45,11 +46,17 @@ const EnrichmentDrawer = () => {
   const [loadingSteps, setLoadingSteps] = useState([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [downloadInProgress, setDownloadInProgress] = useState(false);
+  const [dotAnimation, setDotAnimation] = useState('');
   
   // Close the drawer and reset all states
   const handleDrawerClose = () => {
     setDrawerOpen(false);
     resetEnrichment();
+    
+    // Reset file input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
   
   // Reset upload state
@@ -58,20 +65,25 @@ const EnrichmentDrawer = () => {
     setCsvColumns([]);
     setSelectedColumns([]);
     setAutoDetectedColumn(null);
+    setMatchingResult(null); // Ensure this is reset when uploading a new file
     setUploadStep(0);
     setUploadError("");
   };
   
   // Reset the entire enrichment process
   const resetEnrichment = () => {
+    console.log("Resetting all enrichment state"); // Debug
     resetUpload();
     setEnrichmentComplete(false);
     setEnrichmentResult(null);
     setMatchingCount(null);
+    setMatchingResult(null); // Double-ensure this is reset
+    setBackgroundEnrichment(false); // Ensure background enrichment state is reset
     setShowConfirmation(false);
     setEnrichButtonProcessing(false);
     setLoadingSteps([]);
     setLoadingText("");
+    setDownloadInProgress(false); // Make sure download state is reset
   };
   
   // Handle file upload and parsing
@@ -79,7 +91,13 @@ const EnrichmentDrawer = () => {
     const file = event.target.files[0];
     setUploadError("");
     
+    console.log("New file upload, resetting states"); // Debug
+    
+    // Reset all states to ensure fresh start with new file
+    resetEnrichment();
+    
     if (file) {
+      console.log(`Processing file: ${file.name}, size: ${file.size}`); // Debug
       Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
@@ -96,6 +114,14 @@ const EnrichmentDrawer = () => {
             if (analyzedColumns.length > 0) {
               setSelectedColumns([analyzedColumns[0].name]);
               setAutoDetectedColumn(analyzedColumns[0].name); // Mark as auto-detected
+              
+              // Start background enrichment if we have a high-confidence match
+              if (analyzedColumns[0].score > 20) {
+                // Small delay to allow UI to update first
+                setTimeout(() => {
+                  startBackgroundEnrichment(analyzedColumns[0].name, results.data);
+                }, 500);
+              }
             }
             
             setUploadStep(1);
@@ -148,11 +174,58 @@ const EnrichmentDrawer = () => {
     }).sort((a, b) => b.score - a.score); // Sort by score descending
   };
   
+  // New function to handle background enrichment
+  const startBackgroundEnrichment = async (columnName, csvRows) => {
+    if (!csvRows || !columnName) return;
+    
+    try {
+      setBackgroundEnrichment(true);
+      
+      // Prepare data for enrichment
+      const urls = csvRows.map(row => (row[columnName] || "").trim()).filter(Boolean);
+      
+      // Only do the counting/preview part in the background
+      const response = await fetch("/api/people/enrichment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          linkedin_urls: urls, 
+          confirm: false, 
+          table_name: "all" 
+        })
+      });
+      
+      if (!response.ok) {
+        // Silent fail in background mode - don't show errors to user
+        setBackgroundEnrichment(false);
+        return;
+      }
+      
+      const responseData = await response.json();
+      const matchCount = responseData.matchingCount || 0;
+      
+      // Store the results but don't show them yet
+      if (matchCount > 0) {
+        setMatchingResult(responseData);
+        // Pre-fetch the data but don't display it until user clicks "Start Enrichment"
+      }
+      
+      setBackgroundEnrichment(false);
+    } catch (error) {
+      console.error("Background enrichment error:", error);
+      setBackgroundEnrichment(false);
+    }
+  };
+  
   // Handle column selection
   const handleColumnSelect = (column) => {
-    // If user is selecting a different column, clear the autoDetected status
+    // If user is selecting a different column, clear the autoDetected status and background results
     if (!selectedColumns.includes(column)) {
       setAutoDetectedColumn(null);
+      // Clear any background enrichment results
+      setMatchingCount(null);
+      setMatchingResult(null);
+      setEnrichmentComplete(false);
     }
     // Replace selection with the new column (only one at a time)
     setSelectedColumns([column]);
@@ -173,62 +246,122 @@ const EnrichmentDrawer = () => {
   const handleEnrichData = async () => {
     if (selectedColumns.length === 0) return;
     
+    // If we have background enrichment results and the selected column is still the auto-detected one,
+    // use the pre-fetched results
+    if (matchingResult && selectedColumns[0] === autoDetectedColumn) {
+      setEnrichLoading(true);
+      setMatchingCount(matchingResult.matchingCount || 0);
+      setLoadingSteps(['Matching urls with database...', `• Completed ✓ - ${matchingResult.matchingCount} matches found`, 'Adding contact information...']);
+      
+      // We can skip right to the actual enrichment since we already have the match count
+      const urls = csvData.map(row => (row[selectedColumns[0]] || "").trim()).filter(Boolean);
+      processEnrichData(urls, selectedColumns[0], matchingResult.matchingCount, ['Matching urls with database...', `• Completed ✓ - ${matchingResult.matchingCount} matches found`, 'Adding contact information...']);
+      return;
+    }
+    
+    // If no background results or user changed the column, do the regular flow
     setEnrichLoading(true);
     setMatchingCount(null);
-    setLoadingSteps(['Counting matches...']); // Use ellipsis directly in the step text
+    setLoadingSteps(['Matching urls with database...']); // Use ellipsis directly in the step text
     
     try {
       const selectedColumn = selectedColumns[0];
       const urls = csvData.map(row => (row[selectedColumn] || "").trim()).filter(Boolean);
       
-      try {
-        // Real API call to check matches without actually enriching
-        const response = await fetch("/api/people/enrichment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            linkedin_urls: urls, 
-            confirm: false, 
-            table_name: "all" 
-          })
-        });
-        
+      // Start both the match counting and enrichment in parallel
+      let matchCountPromise = fetch("/api/people/enrichment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          linkedin_urls: urls, 
+          confirm: false, 
+          table_name: "all" 
+        })
+      }).then(response => {
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to preview enrichment");
+          return response.json().then(errorData => {
+            throw new Error(errorData.error || "Failed to preview enrichment");
+          });
+        }
+        return response.json();
+      });
+      
+      // Wait for the match count to come back
+      const matchData = await matchCountPromise;
+      const matchCount = matchData.matchingCount || 0;
+      
+      setMatchingCount(matchCount);
+      setMatchingResult(matchData);
+      
+      if (matchCount > 0) {
+        console.log("Found matches:", matchCount, "- already started enrichment");
+        
+        // Update UI to show matches found
+        const stepsBeforeConfirm = ['Matching urls with database...', `• Completed ✓ - ${matchCount} matches found`, 'Adding contact information...'];
+        setLoadingSteps(stepsBeforeConfirm);
+        
+        // Immediately start the enrichment process without delay
+        // Get original file name if available
+        let filename = "enriched_contacts";
+        if (fileInputRef.current && fileInputRef.current.files.length > 0) {
+          const file = fileInputRef.current.files[0];
+          filename = file.name.replace(/\.[^/.]+$/, "");
         }
         
-        const data = await response.json();
-        const matchCount = data.matchingCount || 0;
+        // Prepare data for enrichment
+        const headers = Object.keys(csvData[0] || {});
         
-        setMatchingCount(matchCount);
-        setMatchingResult(data); // Store full result for later use
-
-        if (matchCount > 0) {
-          console.log("Found matches:", matchCount, "- proceeding with enrichment");
-          // Update the steps without adding "done"
-          setTimeout(() => {
-            const stepsBeforeConfirm = ['Counting matches...', `• Found ${matchCount} matches`, 'Enriching data...'];
-            setLoadingSteps(stepsBeforeConfirm);
-            
-            // Start actual enrichment process
-            processEnrichData(urls, selectedColumn, matchCount, stepsBeforeConfirm);
-          }, 1000);
-        } else {
-          setTimeout(() => {
-            setLoadingSteps(['Counting matches...', '• No matches found to enrich.']);
-            setEnrichLoading(false);
-          }, 1000);
+        try {
+          const enrichResponse = await fetch("/api/people/enrichment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              linkedin_urls: urls,
+              csv_rows: csvData,
+              csv_headers: headers,
+              linkedinHeader: selectedColumn,
+              prepare_export: true, // Prepare export but don't save yet
+              confirm: false, // Not confirming/saving yet
+              table_name: "all",
+              original_filename: filename,
+              row_count: matchCount
+            })
+          });
+          
+          if (!enrichResponse.ok) {
+            const errorData = await enrichResponse.json();
+            throw new Error(errorData.error || "Failed to process enrichment");
+          }
+          
+          const enrichData = await enrichResponse.json();
+          
+          // Store enrichment result for later download
+          setEnrichmentResult({
+            rowsEnriched: enrichData.row_count || matchCount,
+            exportId: enrichData.export_id || null,
+            exportName: enrichData.exportName || `${filename} (Enriched)`,
+            storage_path: enrichData.storage_path || null,
+            allCols: enrichData.allCols || headers
+          });
+          
+          // Mark enrichment as complete and update UI
+          setLoadingSteps([...stepsBeforeConfirm, '• Completed ✓ added contact info']);
+          setEnrichmentComplete(true);
+          setEnrichLoading(false);
+        } catch (enrichError) {
+          console.error("Enrichment processing error:", enrichError);
+          setUploadError("Error during enrichment: " + enrichError.message);
+          setLoadingSteps([...stepsBeforeConfirm, '• Error during enrichment']);
+          setEnrichLoading(false);
         }
-      } catch (error) {
-        console.error("API error:", error);
-        setUploadError("Error connecting to enrichment service: " + error.message);
-        setLoadingSteps(['Counting matches...', '• Error in enrichment preview']);
+      } else {
+        setLoadingSteps(['Matching urls with database...', '• No matches found to enrich.']);
         setEnrichLoading(false);
       }
     } catch (error) {
-      setUploadError(error.message);
-      setLoadingSteps(['Counting matches...', '• Error in enrichment preview']);
+      console.error("API error:", error);
+      setUploadError("Error connecting to enrichment service: " + error.message);
+      setLoadingSteps(['Matching urls with database...', '• Error in enrichment preview']);
       setEnrichLoading(false);
     }
   };
@@ -279,7 +412,7 @@ const EnrichmentDrawer = () => {
       });
       
       // Mark enrichment as complete and update UI
-      setLoadingSteps([...prevSteps, '• Complete']);
+      setLoadingSteps([...prevSteps, '• Completed ✓ added contact info']);
       setEnrichmentComplete(true);
       setEnrichLoading(false);
       
@@ -297,6 +430,8 @@ const EnrichmentDrawer = () => {
     
     setEnrichButtonProcessing(true);
     setDownloadInProgress(true);
+    
+    // Remove optimistic credit update from here
     
     try {
       const selectedColumn = selectedColumns[0];
@@ -349,6 +484,25 @@ const EnrichmentDrawer = () => {
           a.click();
           document.body.removeChild(a);
           window.URL.revokeObjectURL(url);
+          
+          // Now that download is successful, update credits in UI
+          if (creditsRemaining && setCreditsRemaining && creditsRemaining >= matchingCount) {
+            const newCredits = creditsRemaining - matchingCount;
+            setCreditsRemaining(newCredits);
+          }
+
+          // Show toast notification before closing drawer
+          setToastConfig({
+            headerText: "Enriched File Saved to Exports",
+            subText: "Your file has been saved and can be accessed anytime in the exports tab",
+            color: "green"
+          });
+          setTimeout(() => setToastConfig(null), 5000);
+          
+          // Close drawer after short delay
+          setTimeout(() => {
+            handleDrawerClose();
+          }, 500);
         } 
         // Fallback to using storage_path
         else if (enrichmentResult.storage_path) {
@@ -373,22 +527,28 @@ const EnrichmentDrawer = () => {
           a.click();
           document.body.removeChild(a);
           window.URL.revokeObjectURL(url);
+          
+          // Now that download is successful, update credits in UI
+          if (creditsRemaining && setCreditsRemaining && creditsRemaining >= matchingCount) {
+            const newCredits = creditsRemaining - matchingCount;
+            setCreditsRemaining(newCredits);
+          }
+
+          // Show toast notification before closing drawer
+          setToastConfig({
+            headerText: "Enriched File Saved to Exports",
+            subText: "Your file has been saved and can be accessed anytime in the exports tab",
+            color: "green"
+          });
+          setTimeout(() => setToastConfig(null), 5000);
+          
+          // Close drawer after short delay
+          setTimeout(() => {
+            handleDrawerClose();
+          }, 500);
         } else {
           throw new Error("No download path available");
         }
-
-        // Show toast notification before closing drawer
-        setToastConfig({
-          headerText: "Enriched File Saved to Exports",
-          subText: "Your file has been saved and can be accessed anytime in the exports tab",
-          color: "green"
-        });
-        setTimeout(() => setToastConfig(null), 5000);
-        
-        // Close drawer after short delay
-        setTimeout(() => {
-          handleDrawerClose();
-        }, 500);
       } catch (downloadError) {
         console.error("Error downloading file:", downloadError);
         setUploadError("Export saved but download failed. Please check your exports.");
@@ -403,34 +563,33 @@ const EnrichmentDrawer = () => {
     }
   };
   
-  // Render download button with loading state
-  const renderDownloadButton = () => {
-    return !downloadInProgress ? (
-      <div className="flex flex-col items-center">
-        <button
-          onClick={handleConfirmEnrich}
-          className="w-full py-3 px-5 text-sm rounded-md bg-[#404040] hover:bg-[#4a4a4a] text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          disabled={!enrichmentComplete}
-        >
-          <Download className="h-5 w-5 mr-2" />
-          <span>Confirm & Download</span>
-        </button>
-        {enrichmentComplete && matchingCount > 0 && (
-          <span className="text-xs text-neutral-400 mt-1.5">
-            This will use {matchingCount} credit{matchingCount !== 1 ? 's' : ''}
-          </span>
-        )}
-      </div>
-    ) : (
-      <button
-        disabled
-        className="w-full py-3 px-5 text-sm rounded-md bg-[#404040] text-white/70 disabled:opacity-70 flex items-center justify-center gap-2"
-      >
-        <div className="h-5 w-5 border-2 border-t-white border-white/20 rounded-full animate-spin mr-2"></div>
-        <span>Downloading...</span>
-      </button>
-    );
-  };
+  // Effect for dot animation
+  useEffect(() => {
+    if (!enrichLoading) {
+      setDotAnimation('');
+      return;
+    }
+    
+    let isMounted = true;
+    let phase = 0;
+    
+    const animateDots = () => {
+      if (!isMounted) return;
+      
+      if (phase === 0) setDotAnimation('.');
+      else if (phase === 1) setDotAnimation('..');
+      else if (phase === 2) setDotAnimation('...');
+      else if (phase === 3) setDotAnimation('..');
+      else if (phase === 4) setDotAnimation('.');
+      else if (phase === 5) setDotAnimation('');
+      
+      phase = (phase + 1) % 6;
+      setTimeout(animateDots, 250);
+    };
+    
+    animateDots();
+    return () => { isMounted = false; };
+  }, [enrichLoading]);
   
   // Effect to animate typing the terminal output
   useEffect(() => {
@@ -438,7 +597,7 @@ const EnrichmentDrawer = () => {
     
     // Initialize steps with proper formatting if needed
     if (loadingSteps.length === 0 && matchingCount === null) {
-      setLoadingSteps(['Counting matches...']);
+      setLoadingSteps(['Matching urls with database...']);
     }
     
     let isCancelled = false;
@@ -478,7 +637,7 @@ const EnrichmentDrawer = () => {
       if (charIndex < currentStep.length) {
         charIndex++;
         // Slow down typing speed for counting/enriching - twice as slow
-        const typingDelay = currentStep.includes('Counting matches') || currentStep.includes('Enriching data') ? 70 : 35;
+        const typingDelay = currentStep.includes('Matching urls with database') || currentStep.includes('Adding contact information') ? 70 : 35;
         timeoutId = setTimeout(type, typingDelay);
       } else if (stepIndex < loadingSteps.length - 1) {
         // Move to next line if there is one
@@ -505,6 +664,40 @@ const EnrichmentDrawer = () => {
       }
     };
   }, [enrichLoading, loadingSteps, loadingText, matchingCount]);
+  
+  useEffect(() => {
+    // Reset states when drawer is opened
+    if (drawerOpen) {
+      // If there's an active download in progress, keep that state
+      // Otherwise reset everything if we're opening from a previously closed state
+      if (!downloadInProgress) {
+        resetEnrichment();
+      }
+    }
+  }, [drawerOpen]);
+  
+  // Add a function to go back to upload step
+  const goBackToUpload = () => {
+    resetEnrichment();
+    
+    // Reset file input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    
+    setUploadStep(0);
+  };
+  
+  // Update the back button functionality
+  const handleBackButton = () => {
+    if (uploadStep > 0) {
+      // If we're in a step after file upload, go back to upload step
+      goBackToUpload();
+    } else {
+      // Otherwise just close the drawer
+      handleDrawerClose();
+    }
+  };
   
   // For the terminal view section - reorganize to show both the terminal and column selection at the same time
   return (
@@ -535,7 +728,7 @@ const EnrichmentDrawer = () => {
               <div className="flex items-center">
                 {uploadStep > 0 && !enrichLoading && matchingCount === null && (
                   <button
-                    onClick={() => uploadStep > 0 ? resetUpload() : handleDrawerClose()}
+                    onClick={handleBackButton}
                     className="mr-3 h-7 w-7 flex items-center justify-center rounded-full bg-[#303030] hover:bg-[#404040] transition-colors"
                   >
                     <ChevronLeftIcon className="h-4 w-4" />
@@ -544,7 +737,9 @@ const EnrichmentDrawer = () => {
                 <h2 className="text-base font-semibold">
                   {uploadStep === 0 
                     ? "Enrich Your Data" 
-                    : "Select Column"}
+                    : (enrichLoading || matchingCount !== null)
+                      ? "Enriching"
+                      : "Select Column"}
                 </h2>
               </div>
               <button
@@ -591,21 +786,22 @@ const EnrichmentDrawer = () => {
                       <div className="text-xs text-neutral-500 mb-1 px-1">Before</div>
                       <table className="w-full text-xs border-collapse">
                         <tbody>
-                          <tr className="border-b border-[#404040]">
-                            <td className="py-2 px-2">Kanye W</td>
-                            <td className="py-2 px-2 text-blue-400">linkedin.com/in/john</td>
+                        <tr className="border-b border-[#404040]">
+                            <td className="py-2 px-2">Kanye</td>
+                            <td className="py-2 px-2 text-blue-400">linkedin.com/in/kanye</td>
                             <td className="py-2 px-2 text-neutral-600">{'\u00A0'.repeat(20)}</td>
                           </tr>
-                          <tr className="border-b border-[#404040]">
-                            <td className="py-2 px-2">Adolf H</td>
-                            <td className="py-2 px-2 text-blue-400">linkedin.com/in/jane</td>
-                            <td className="py-2 px-2 text-neutral-600">{'\u00A0'.repeat(20)}</td>
-                          </tr>
-                          <tr>
-                            <td className="py-2 px-2">Joe m</td>
+                        <tr>
+                            <td className="py-2 px-2">Joe</td>
                             <td className="py-2 px-2 text-blue-400">linkedin.com/in/joe</td>
                             <td className="py-2 px-2 text-neutral-600">{'\u00A0'.repeat(20)}</td>
                           </tr>
+                          <tr className="border-b border-[#404040]">
+                            <td className="py-2 px-2">Adolf</td>
+                            <td className="py-2 px-2 text-blue-400">linkedin.com/in/adolf</td>
+                            <td className="py-2 px-2 text-neutral-600">{'\u00A0'.repeat(20)}</td>
+                          </tr>
+
                         </tbody>
                       </table>
                     </div>
@@ -615,21 +811,22 @@ const EnrichmentDrawer = () => {
                       <div className="text-xs text-neutral-500 mb-1 px-1">After</div>
                       <table className="w-full text-xs border-collapse">
                         <tbody>
-                          <tr className="border-b border-[#404040]">
-                            <td className="py-2 px-2">Kanye W</td>
+                        <tr className="border-b border-[#404040]">
+                            <td className="py-2 px-2">Kanye</td>
                             <td className="py-2 px-2 text-blue-400">linkedin.com/in/kanye</td>
                             <td className="py-2 px-2 text-green-400">kayne@yeezy.com</td>
                           </tr>
-                          <tr className="border-b border-[#404040]">
-                            <td className="py-2 px-2">Adolf H</td>
-                            <td className="py-2 px-2 text-blue-400">linkedin.com/in/adolf</td>
-                            <td className="py-2 px-2 text-green-400">adolf@aushwitz.com</td>
-                          </tr>
-                          <tr>
-                            <td className="py-2 px-2">Joe M</td>
+                        <tr>
+                            <td className="py-2 px-2">Joe</td>
                             <td className="py-2 px-2 text-blue-400">linkedin.com/in/joe</td>
                             <td className="py-2 px-2 text-green-400">joe@mama.com</td>
                           </tr>
+                          <tr className="border-b border-[#404040]">
+                            <td className="py-2 px-2">Adolf</td>
+                            <td className="py-2 px-2 text-blue-400">linkedin.com/in/adolf</td>
+                            <td className="py-2 px-2 text-green-400">adolf@aushwitz.com</td>
+                          </tr>
+
                         </tbody>
                       </table>
                     </div>
@@ -654,21 +851,21 @@ const EnrichmentDrawer = () => {
                   {(enrichLoading || matchingCount !== null) && (
                     <div className="min-h-[200px]">
                       {/* Terminal style display */}
-                      <div className="w-full bg-[#1a1a1a] border border-[#303030] rounded-md overflow-hidden">
-                        <div className="p-6 font-mono text-sm min-h-[100px]">
+                      <div className="w-full bg-[#212121]/30 rounded-md overflow-hidden">
+                        <div className="p-6 font-mono text-sm min-h-[100px] text-left">
                           {/* For active loading terminal with typing animation */}
                           {enrichLoading && loadingText.split('\n').map((line, index) => {
                             const isCurrentTyping = (index === loadingText.split('\n').length - 1);
                             const isFullyTyped = index < loadingSteps.length && line === loadingSteps[index];
                             
                             // Custom styling for different message types
-                            let textClass = 'text-white'; // Default: white text
+                            let textClass = 'text-neutral-300'; // Default: light gray text
                             
-                            // Assign styles based on content
-                            if (line.includes('Found') || line.includes('Complete')) {
-                              textClass = 'text-green-400 font-semibold'; // Found matches and Complete: green, bold
-                            } else if (line.includes('Enriching data')) {
-                              textClass = 'text-white font-medium';
+                            // Pre-assign green text for matches found and complete lines
+                            if (line.includes('✓')) {
+                              textClass = 'text-green-400 font-semibold'; // Green, bold
+                            } else if (line.includes('Adding contact information')) {
+                              textClass = 'text-neutral-200 font-medium';
                             } else if (line.includes('Error') || line.includes('No matches found')) {
                               textClass = 'text-red-400 font-semibold'; // Errors: red, bold
                             }
@@ -678,14 +875,12 @@ const EnrichmentDrawer = () => {
                                 {line.endsWith('...') ? (
                                   <>
                                     {line.slice(0, -3)}
-                                    <span className="wave-dot">.</span>
-                                    <span className="wave-dot">.</span>
-                                    <span className="wave-dot">.</span>
+                                    {isCurrentTyping ? dotAnimation : '...'}
                                   </>
                                 ) : (
                                   line
                                 )}
-                                {isCurrentTyping && enrichLoading && !isFullyTyped && (
+                                {isCurrentTyping && enrichLoading && !isFullyTyped && !line.endsWith('...') && (
                                   <span className="inline-block h-4 w-2.5 bg-neutral-300 ml-0.5 animate-pulse"></span>
                                 )}
                               </div>
@@ -695,20 +890,20 @@ const EnrichmentDrawer = () => {
                           {/* For static terminal display (when processing is done) */}
                           {!enrichLoading && matchingCount !== null && (
                             <>
-                              <div className="text-white">
-                                Counting matches...
+                              <div className="text-neutral-300">
+                                Matching urls with database...
                               </div>
                               <div className="text-green-400 font-semibold">
-                                • Found {matchingCount} matches
+                                • Completed ✓ - {matchingCount} matches found
                               </div>
-                              {loadingSteps.some(step => step.includes('Enriching data')) && (
-                                <div className="text-white font-medium mt-1">
-                                  Enriching data...
+                              {loadingSteps.some(step => step.includes('Adding contact information')) && (
+                                <div className="text-neutral-200 font-medium mt-1">
+                                  Adding contact information...
                                 </div>
                               )}
-                              {loadingSteps.some(step => step.includes('Complete')) && (
+                              {loadingSteps.some(step => step.includes('✓')) && loadingSteps.some(step => step.includes('Adding contact information')) && (
                                 <div className="text-green-400 font-semibold mt-1">
-                                  • Complete
+                                  • Completed ✓ added contact info
                                 </div>
                               )}
                             </>
@@ -820,10 +1015,31 @@ const EnrichmentDrawer = () => {
                 </button>
               )}
               
-              {/* When enrichment is complete, show "Confirm & Download" button */}
-              {matchingCount !== null && (
-                <div className="flex flex-col items-center">
-                  {renderDownloadButton()}
+              {/* When enrichment is loading or complete, show "Confirm & Download" button */}
+              {(enrichLoading || matchingCount !== null) && (
+                <div className="flex flex-col items-center w-full">
+                  <button
+                    onClick={handleConfirmEnrich}
+                    className="w-full py-3 text-sm rounded-md bg-[#404040] hover:bg-[#4a4a4a] text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    disabled={!enrichmentComplete || downloadInProgress}
+                  >
+                    {downloadInProgress ? (
+                      <>
+                        <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>
+                        <span>Downloading...</span>
+                      </>
+                    ) : enrichmentComplete && matchingCount > 0 ? (
+                      <>
+                        <Download className="h-5 w-5 mr-2" />
+                        <span>Export File <span className="text-white/60">({matchingCount} credits)</span></span>
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-5 w-5 mr-2" />
+                        <span>Export File</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               )}
             </div>
