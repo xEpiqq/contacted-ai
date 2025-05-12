@@ -1,9 +1,31 @@
 "use client";
 
 import React, { useRef, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { ArrowUpIcon, ArrowLeftIcon } from "@heroicons/react/24/outline";
-import { Badge } from "@/components/badge";
+import { BadgeButton } from "@/components/badge";
+
+// Internal Badge component for the comma-separated bubbles (copied from SearchStepTwo)
+function Badge({ children, onRemove }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[#2b2b2b] text-sm text-neutral-400"
+    >
+      {children}
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-neutral-500 hover:text-neutral-300"
+      >
+        ×
+      </button>
+    </motion.div>
+  );
+}
 
 // Sample industry examples
 export const industryExamples = [
@@ -18,6 +40,28 @@ export const industryExamples = [
   "renewable energy",
   "transportation",
   "agriculture",
+];
+
+// Badge color options - matching SearchStepTwo
+const badgeColors = [
+  "red",
+  "orange",
+  "amber",
+  "yellow",
+  "lime",
+  "green",
+  "emerald",
+  "teal",
+  "cyan",
+  "sky",
+  "blue",
+  "indigo",
+  "violet",
+  "purple",
+  "fuchsia",
+  "pink",
+  "rose",
+  "zinc",
 ];
 
 function SearchStepThree({
@@ -48,6 +92,23 @@ function SearchStepThree({
       textareaRef.current.focus();
     }
   }, []);
+
+  // Handle text changes - added comma separation functionality
+  const handleTextChange = (e) => {
+    const newText = e.target.value;
+    
+    // Check for comma to create new badge
+    if (newText.endsWith(",")) {
+      const industry = newText.slice(0, -1).trim();
+      if (industry) {
+        handleExampleClick(industry, false, true);
+        setText("");
+      }
+      return;
+    }
+    
+    setText(newText);
+  };
 
   // Handle key presses
   const handleKeyDown = (e) => {
@@ -108,15 +169,17 @@ function SearchStepThree({
       >
         <div className="flex flex-col px-4 py-2">
           <div className="flex items-center flex-wrap gap-2">
-            {/* Industry badges */}
-            {selectedIndustries.map((industry, index) => (
-              <Badge
-                key={index}
-                onRemove={() => handleBadgeRemove(index, false, true)}
-              >
-                {industry}
-              </Badge>
-            ))}
+            {/* Industry badges - using internal Badge component */}
+            <AnimatePresence>
+              {selectedIndustries.map((industry, index) => (
+                <Badge
+                  key={index}
+                  onRemove={() => handleBadgeRemove(index, false, true)}
+                >
+                  {industry}
+                </Badge>
+              ))}
+            </AnimatePresence>
             
             {/* Text input */}
             <textarea
@@ -124,7 +187,7 @@ function SearchStepThree({
               rows={1}
               placeholder="Add industries (e.g. technology, healthcare)"
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={handleTextChange}
               onKeyDown={handleKeyDown}
               className="flex-1 ml-2 resize-none overflow-hidden bg-transparent placeholder:text-neutral-400 text-sm leading-6 outline-none min-w-[200px]"
             />
@@ -145,7 +208,7 @@ function SearchStepThree({
         </div>
       </form>
 
-      {/* Examples */}
+      {/* Examples section - updated to match SearchStepTwo style */}
       {showIndustryExamples && industryExamples.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -153,28 +216,41 @@ function SearchStepThree({
           transition={{ delay: 0.1 }}
           className="mt-3"
         >
-          <div className="flex justify-between items-center text-xs text-neutral-500 mb-1">
-            <span>examples</span>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {industryExamples
+              .filter(example => !selectedIndustries.includes(example))
+              .map((example, idx) => (
+                <BadgeButton
+                  key={idx}
+                  color={badgeColors[idx % badgeColors.length]}
+                  onClick={() => handleExampleClick(example, false, true)}
+                >
+                  {example}
+                </BadgeButton>
+              ))}
+          </div>
+          <div className="mt-2">
             <button
               type="button"
               onClick={() => setShowIndustryExamples(false)}
-              className="text-neutral-500 hover:text-neutral-300"
+              className="text-xs text-neutral-400 hover:text-neutral-300"
             >
-              hide
+              hide examples
             </button>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {industryExamples.slice(0, 6).map((example, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleExampleClick(example, false, true)}
-                className="px-2 py-1 bg-[#2b2b2b] hover:bg-[#3a3a3a] rounded-full text-sm text-neutral-400 transition-colors"
-              >
-                {example}
-              </button>
-            ))}
-          </div>
+        </motion.div>
+      )}
+
+      {/* Show examples button (when hidden) */}
+      {!showIndustryExamples && (
+        <motion.div layout className="mt-2 text-right">
+          <button
+            type="button"
+            onClick={() => setShowIndustryExamples(true)}
+            className="text-xs text-neutral-400 hover:text-neutral-300"
+          >
+            show examples
+          </button>
         </motion.div>
       )}
     </motion.div>

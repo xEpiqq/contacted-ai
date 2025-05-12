@@ -48,6 +48,14 @@ export const SearchContextProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [creditsRemaining, setCreditsRemaining] = useState(2482);
 
+  // Function to navigate to a specific step
+  const navigateToStep = (targetStep) => {
+    // Only allow navigation to steps 0-3
+    if (targetStep >= 0 && targetStep <= 3) {
+      setCurrentStep(targetStep);
+    }
+  };
+
   // Fetch user data from Supabase when component mounts
   useEffect(() => {
     const fetchUserData = async () => {
@@ -135,6 +143,7 @@ export const SearchContextProvider = ({ children }) => {
     
     // Search Flow States
     currentStep, setCurrentStep,
+    navigateToStep,
     answerType, setAnswerType,
     brainstorm, setBrainstorm,
     

@@ -145,6 +145,13 @@ function SearchStepTwo({
   // References
   const textareaRef = useRef(null);
 
+  // Local check for if user can proceed
+  const localCanProceed = 
+    canProceed || 
+    (answerType === "local biz" && selectedExamples.length > 0) ||
+    (answerType === "people" && !brainstorm && selectedExamples.length > 0) ||
+    (answerType === "people" && brainstorm && brainstormExamples.length > 0);
+
   // Local heading text based on answer type and brainstorm mode
   const getHeadingText = () => {
     if (answerType === "people") {
@@ -251,7 +258,17 @@ function SearchStepTwo({
         return;
       }
       
-      if (canProceed && !brainstorm) {
+      // Submit for both people and local biz
+      if (localCanProceed && !brainstorm) {
+        // Add the current text as a badge if it's not empty and doesn't end with comma
+        if (text.trim() && !text.endsWith(",")) {
+          if (answerType === "people") {
+            handleExampleClick(text.trim());
+          } else if (answerType === "local biz") {
+            handleExampleClick(text.trim());
+          }
+          setText("");
+        }
         handleSubmit(1);
       }
     }
@@ -273,20 +290,22 @@ function SearchStepTwo({
   const handleTextChange = (e) => {
     const newText = e.target.value;
     
-    // Step 2 job titles (people)
-    if (answerType === "people") {
-      if (newText.endsWith(",")) {
-        const keyword = newText.slice(0, -1).trim();
-        if (keyword) {
+    // Create badge on comma for both people and local biz
+    if (newText.endsWith(",")) {
+      const keyword = newText.slice(0, -1).trim();
+      if (keyword) {
+        if (answerType === "people") {
           if (brainstorm) {
             handleExampleClick(keyword, true);
           } else {
             handleExampleClick(keyword);
           }
-          setText("");
+        } else if (answerType === "local biz") {
+          handleExampleClick(keyword);
         }
-        return;
+        setText("");
       }
+      return;
     }
     
     setText(newText);
@@ -330,8 +349,18 @@ function SearchStepTwo({
       return;
     }
     
-    // Only proceed to next step if not in brainstorm mode or if no text entered
-    if (!brainstorm) {
+    // Only proceed to next step if not in brainstorm mode
+    if (!brainstorm && localCanProceed) {
+      // Add the current text as a badge if it's not empty
+      if (text.trim()) {
+        if (answerType === "people") {
+          handleExampleClick(text.trim());
+        } else if (answerType === "local biz") {
+          handleExampleClick(text.trim());
+        }
+        setText("");
+      }
+      
       handleSubmit(1);
     }
   };
@@ -404,9 +433,7 @@ function SearchStepTwo({
       <AnimatePresence mode="wait">
         <motion.div
           key={`heading-${answerType}-${brainstorm}`}
-          className={`flex flex-col items-center gap-2 mb-4 relative z-0 ${
-            answerType === "people" && !brainstorm ? "-mt-28" : ""
-          }`}
+          className="flex flex-col items-center gap-2 mb-4 relative z-0"
           initial={{ x: 100, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: -100, opacity: 0 }}
@@ -511,9 +538,9 @@ function SearchStepTwo({
             <div className="ml-auto">
               <button
                 type="submit"
-                disabled={(!canProceed && !brainstorm) || (brainstorm && !text.trim() && !showSuggestions && !isProcessing)}
+                disabled={(!localCanProceed && !brainstorm) || (brainstorm && !text.trim() && !showSuggestions && !isProcessing)}
                 className={`h-9 w-9 flex items-center justify-center rounded-full transition-opacity ${
-                  (canProceed && !brainstorm) || (brainstorm && text.trim()) || (brainstorm && (showSuggestions || isProcessing))
+                  (localCanProceed && !brainstorm) || (brainstorm && text.trim()) || (brainstorm && (showSuggestions || isProcessing))
                     ? "bg-white text-black hover:opacity-90"
                     : "bg-neutral-600 text-white cursor-not-allowed opacity-60"
                 }`}

@@ -14,6 +14,7 @@ import SearchStepFour from "../pages/SearchStepFour";
 import EnrichmentDrawer from "../layout/EnrichmentDrawer";
 import ExportsDrawer from "../layout/ExportsDrawer";
 import Toasts from "@/components/toasts";
+import StepBadges from "./StepBadges";
 
 // Component that contains all the main UI and routing
 function SearchApp() {
@@ -56,9 +57,11 @@ function SearchApp() {
   const hasText = text.trim().length > 0;
   const hasBadges = 
     (currentStep === 1 && 
-     answerType === "people" && 
-     ((brainstorm && brainstormExamples.length > 0) || 
-      (!brainstorm && selectedExamples.length > 0))) || 
+     ((answerType === "people" && 
+       ((brainstorm && brainstormExamples.length > 0) || 
+        (!brainstorm && selectedExamples.length > 0))) ||
+      (answerType === "local biz" && selectedExamples.length > 0)
+     )) || 
     (currentStep === 2 && selectedIndustries.length > 0);
   const canProceed = hasText || hasBadges;
 
@@ -156,23 +159,28 @@ function SearchApp() {
     setText("");
   };
 
-  // Handle going back to previous step
+  // Enhanced handleBack function for step navigation
   const handleBack = (targetStep) => {
+    // Set the current step
     setCurrentStep(targetStep);
     
-    // Clear text input when going back
+    // Always clear text input when navigating
     setText("");
     
-    // Set guide state when going backwards
-    if (targetStep === 1) {
-      setGuideOpen(true); // Open guide when going back to step 2 (page 2)
-    } else if (targetStep === 0) {
-      // If going back to step 0, reset everything
+    // Set guide state
+    if (targetStep === 1 || targetStep === 2) {
+      setGuideOpen(true);
+    } else {
       setGuideOpen(false);
+    }
+    
+    // If going back to step 0, reset everything
+    if (targetStep === 0) {
       setAnswerType("");
       setSelectedExamples([]);
       setBrainstormExamples([]);
       setSelectedIndustries([]);
+      setBrainstorm(false);
     }
   };
 
@@ -552,24 +560,8 @@ function SearchApp() {
       
       {/* UI overlay elements that don't affect layout */}
       <div className="absolute top-0 right-0 bottom-0 left-0 pointer-events-none">
-        {/* Step Badges - only show when not in manual mode */}
-        {!manualMode && currentStep <= 2 && (
-          <div className="fixed top-20 left-4 flex flex-col gap-2 z-10 pointer-events-auto">
-            {[1, 2, 3].map((step) => (
-              <button
-                key={step}
-                onClick={() => step <= currentStep && handleBack(step - 1)}
-                className={`px-3 py-1 rounded-full text-sm ${
-                  step <= currentStep
-                    ? "bg-green-500/20 text-green-700 cursor-pointer hover:bg-green-500/30"
-                    : "bg-gray-500/20 text-gray-500"
-                }`}
-              >
-                Step {step}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Step Badges - use standalone component with direct context access */}
+        {!manualMode && currentStep < 4 && <StepBadges />}
       </div>
       
       {/* Main content area with search or manual search */}
@@ -577,10 +569,13 @@ function SearchApp() {
         {manualMode ? (
           <ManualSearch />
         ) : (
-          <main className="flex-1 flex flex-col items-center justify-center px-4 mt-72">
-            <AnimatePresence mode="wait">
-              {renderSearchStep()}
-            </AnimatePresence>
+          <main className="flex-1 flex flex-col items-center px-4 mt-72">
+            {/* Fixed position container for consistent input placement */}
+            <div className="w-full max-w-[690px]">
+              <AnimatePresence mode="wait">
+                {renderSearchStep()}
+              </AnimatePresence>
+            </div>
           </main>
         )}
       </AnimatePresence>

@@ -560,47 +560,11 @@ const EnrichmentDrawer = () => {
             <div className="p-4 space-y-4 flex-1 overflow-y-auto thin-scrollbar pb-24">
               {/* STEP 0: UPLOAD CSV */}
               {uploadStep === 0 && (
-                <>
-                  <div className="mb-4 space-y-3">
-                    <p className="text-xs text-neutral-400">Upload a CSV with LinkedIn URLs and receive email, phone, etc.</p>
-                    
-                    {/* Process visualization */}
-                    <div className="flex items-center justify-between py-3 px-1">
-                      <div className="flex flex-col items-center">
-                        <div className="w-12 h-12 rounded-full bg-[#303030] flex items-center justify-center mb-1">
-                          <FileUp className="h-5 w-5 text-blue-400" />
-                        </div>
-                        <span className="text-[10px] text-neutral-400">Upload CSV</span>
-                      </div>
-                      
-                      <div className="flex-1 h-[2px] bg-gradient-to-r from-transparent via-[#404040] to-transparent mx-1"></div>
-                      
-                      <div className="flex flex-col items-center">
-                        <div className="w-12 h-12 rounded-full bg-[#303030] flex items-center justify-center mb-1">
-                          <CheckCircle className="h-5 w-5 text-green-400" />
-                        </div>
-                        <span className="text-[10px] text-neutral-400">Enrich Data</span>
-                      </div>
-                      
-                      <div className="flex-1 h-[2px] bg-gradient-to-r from-transparent via-[#404040] to-transparent mx-1"></div>
-                      
-                      <div className="flex flex-col items-center">
-                        <div className="w-12 h-12 rounded-full bg-[#303030] flex items-center justify-center mb-1">
-                          <Download className="h-5 w-5 text-purple-400" />
-                        </div>
-                        <span className="text-[10px] text-neutral-400">Download</span>
-                      </div>
-                    </div>
-                  </div>
+                <div className="space-y-4">
+                  <h3 className="font-medium">Upload a CSV with LinkedIn URLs</h3>
                   
-                  <div className="border border-dashed border-[#404040] rounded-lg p-6 text-center space-y-3">
-                    <div className="flex justify-center">
-                      <Upload className="h-7 w-7 text-neutral-400" />
-                    </div>
-                    <div>
-                      <p className="font-medium">Upload CSV File</p>
-                      <p className="text-xs text-neutral-400 mt-1">Must contain a column with LinkedIn URLs</p>
-                    </div>
+                  {/* Traditional file upload area with dotted border */}
+                  <div className="mb-6">
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -611,39 +575,60 @@ const EnrichmentDrawer = () => {
                     />
                     <label
                       htmlFor="csv-upload"
-                      className="inline-block px-4 py-2 bg-[#404040] hover:bg-[#4a4a4a] transition-colors rounded-md text-sm cursor-pointer"
+                      className="flex flex-col items-center justify-center gap-2 py-8 border-2 border-dashed border-[#404040] hover:border-[#606060] transition-colors rounded-md cursor-pointer w-full"
                     >
-                      Choose File
+                      <Upload className="h-8 w-8 text-neutral-400" />
+                      <span className="text-sm text-neutral-300">Click to upload CSV file</span>
+                      <span className="text-xs text-neutral-500">File must contain LinkedIn URLs</span>
                     </label>
                   </div>
                   
-                  {/* Example data format */}
-                  <div className="mt-4 p-3 bg-[#252525] rounded-lg border border-[#303030]">
-                    <p className="text-xs font-medium mb-2">Example CSV format:</p>
-                    <div className="bg-[#1f1f1f] border border-[#404040] rounded overflow-hidden text-[10px]">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-[#404040]">
-                            <th className="px-2 py-1 text-left font-normal text-neutral-400">Name</th>
-                            <th className="px-2 py-1 text-left font-normal text-neutral-400">LinkedIn URL</th>
-                            <th className="px-2 py-1 text-left font-normal text-neutral-400">Email</th>
-                          </tr>
-                        </thead>
+                  {/* Example CSV format with before/after tables */}
+                  <div className="mt-10">
+
+                    {/* Before table */}
+                    <div className="mb-4">
+                      <div className="text-xs text-neutral-500 mb-1 px-1">Before</div>
+                      <table className="w-full text-xs border-collapse">
                         <tbody>
                           <tr className="border-b border-[#404040]">
-                            <td className="px-2 py-1">John Smith</td>
-                            <td className="px-2 py-1 text-blue-400">linkedin.com/in/johnsmith</td>
-                            <td className="px-2 py-1 text-green-400">After enrichment</td>
+                            <td className="py-2 px-2">Kanye W</td>
+                            <td className="py-2 px-2 text-blue-400">linkedin.com/in/john</td>
+                            <td className="py-2 px-2 text-neutral-600">{'\u00A0'.repeat(20)}</td>
                           </tr>
                           <tr className="border-b border-[#404040]">
-                            <td className="px-2 py-1">Jane Doe</td>
-                            <td className="px-2 py-1 text-blue-400">linkedin.com/in/janedoe</td>
-                            <td className="px-2 py-1 text-green-400">After enrichment</td>
+                            <td className="py-2 px-2">Adolf H</td>
+                            <td className="py-2 px-2 text-blue-400">linkedin.com/in/jane</td>
+                            <td className="py-2 px-2 text-neutral-600">{'\u00A0'.repeat(20)}</td>
                           </tr>
                           <tr>
-                            <td className="px-2 py-1">Alex Johnson</td>
-                            <td className="px-2 py-1 text-blue-400">linkedin.com/in/alexjohnson</td>
-                            <td className="px-2 py-1 text-green-400">After enrichment</td>
+                            <td className="py-2 px-2">Joe m</td>
+                            <td className="py-2 px-2 text-blue-400">linkedin.com/in/joe</td>
+                            <td className="py-2 px-2 text-neutral-600">{'\u00A0'.repeat(20)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    
+                    {/* After table */}
+                    <div>
+                      <div className="text-xs text-neutral-500 mb-1 px-1">After</div>
+                      <table className="w-full text-xs border-collapse">
+                        <tbody>
+                          <tr className="border-b border-[#404040]">
+                            <td className="py-2 px-2">Kanye W</td>
+                            <td className="py-2 px-2 text-blue-400">linkedin.com/in/kanye</td>
+                            <td className="py-2 px-2 text-green-400">kayne@yeezy.com</td>
+                          </tr>
+                          <tr className="border-b border-[#404040]">
+                            <td className="py-2 px-2">Adolf H</td>
+                            <td className="py-2 px-2 text-blue-400">linkedin.com/in/adolf</td>
+                            <td className="py-2 px-2 text-green-400">adolf@aushwitz.com</td>
+                          </tr>
+                          <tr>
+                            <td className="py-2 px-2">Joe M</td>
+                            <td className="py-2 px-2 text-blue-400">linkedin.com/in/joe</td>
+                            <td className="py-2 px-2 text-green-400">joe@mama.com</td>
                           </tr>
                         </tbody>
                       </table>
@@ -655,7 +640,8 @@ const EnrichmentDrawer = () => {
                       {uploadError}
                     </div>
                   )}
-                </>
+                  
+                </div>
               )}
               
               {/* STEP 1: SELECT COLUMN AND TERMINAL VIEW */}
