@@ -31,6 +31,7 @@ const ExportsDrawer = () => {
   const [newExportName, setNewExportName] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const [downloadInProgress, setDownloadInProgress] = useState(false);
+  const [downloadingExportId, setDownloadingExportId] = useState(null);
   const [exportsFetched, setExportsFetched] = useState(false);
   
   // Close drawer and reset state
@@ -149,6 +150,7 @@ const ExportsDrawer = () => {
     
     // Reset the renaming state
     setIsRenaming(false);
+    setShowExportOptions(false);
     setNewExportName("");
     
     // Perform the actual API call in the background
@@ -219,6 +221,7 @@ const ExportsDrawer = () => {
     if (downloadInProgress) return;
     
     setDownloadInProgress(true);
+    setDownloadingExportId(id);
     
     try {
       // First check if storage_path exists
@@ -275,6 +278,7 @@ const ExportsDrawer = () => {
       // Add a short delay before resetting to avoid multiple clicks
       setTimeout(() => {
         setDownloadInProgress(false);
+        setDownloadingExportId(null);
       }, 1000);
     }
   };
@@ -399,11 +403,11 @@ const ExportsDrawer = () => {
                         <div className="flex items-center gap-1">
                           <button
                             aria-label="download export"
-                            className={`p-1.5 rounded-md hover:bg-[#4a4a4a] text-green-500 hover:text-green-400 transition-colors ${downloadInProgress ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`p-1.5 rounded-md hover:bg-[#4a4a4a] text-green-500 hover:text-green-400 transition-colors ${downloadingExportId === exp.id ? 'opacity-50 cursor-not-allowed' : ''}`}
                             onClick={() => handleDownloadExport(exp.id)}
-                            disabled={downloadInProgress}
+                            disabled={downloadingExportId === exp.id}
                           >
-                            {downloadInProgress ? (
+                            {downloadingExportId === exp.id ? (
                               <div className="h-4 w-4 border-2 border-t-green-500 border-green-200 rounded-full animate-spin"></div>
                             ) : (
                               <Download className="h-4 w-4" />
@@ -509,22 +513,25 @@ const ExportsDrawer = () => {
             
             {/* Delete confirmation panel at bottom of drawer */}
             {pendingDeleteId && (
-              <div className="border-t border-[#404040] bg-[#252525] p-4 mt-auto">
-                <p className="text-xs text-neutral-300 mb-3">Are you sure you want to delete this export? This action cannot be undone.</p>
-                <div className="flex justify-end gap-2">
-                  <button 
-                    onClick={cancelDelete}
-                    className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    onClick={confirmDelete}
-                    className="px-3 py-1.5 text-xs rounded bg-red-900/60 hover:bg-red-900/80 text-white transition-colors flex items-center gap-1.5"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    <span>Delete</span>
-                  </button>
+              <div className="border-t border-[#404040] bg-[#2b2b2b] p-4 mt-auto">
+                <div className="flex flex-col">
+                  <h3 className="text-sm font-medium mb-2">Confirm deletion</h3>
+                  <p className="text-xs text-neutral-400 mb-4">Are you sure you want to delete this export? This action cannot be undone.</p>
+                  <div className="flex justify-between gap-2">
+                    <button 
+                      onClick={cancelDelete}
+                      className="flex-1 px-3 py-2 text-xs text-center rounded bg-[#3a3a3a] hover:bg-[#464646] text-white transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={confirmDelete}
+                      className="flex-1 px-3 py-2 text-xs text-center rounded bg-transparent border border-red-600 text-red-500 hover:bg-red-900/10 hover:text-red-400 font-medium transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

@@ -14,7 +14,6 @@ import SearchStepFour from "../pages/SearchStepFour";
 import EnrichmentDrawer from "../layout/EnrichmentDrawer";
 import ExportsDrawer from "../layout/ExportsDrawer";
 import Toasts from "@/components/toasts";
-import StepBadges from "./StepBadges";
 
 // Component that contains all the main UI and routing
 function SearchApp() {
@@ -37,7 +36,8 @@ function SearchApp() {
     setTotalResults,
     searchFilters,
     setSearchFilters,
-    searchLimit
+    searchLimit,
+    navigateToStep
   } = useSearchContext();
 
   // Local state for search flow
@@ -236,9 +236,93 @@ function SearchApp() {
           "Company": "Innovation LLC",
           "Emails": "ajohnson@innovation.co",
           "Phone numbers": "555-456-7890"
+        },
+        {
+          "Full name": "Emily Williams",
+          "Job title": "UX Designer",
+          "Company": "Design Studio",
+          "Emails": "emily.w@designstudio.io",
+          "Phone numbers": "555-234-5678"
+        },
+        {
+          "Full name": "Michael Brown",
+          "Job title": "Sales Director",
+          "Company": "Growth Partners",
+          "Emails": "mbrown@growthpartners.com",
+          "Phone numbers": "555-345-6789"
+        },
+        {
+          "Full name": "Sarah Miller",
+          "Job title": "Content Strategist",
+          "Company": "Media Solutions",
+          "Emails": "sarah@mediasolutions.com",
+          "Phone numbers": "555-456-7890"
+        },
+        {
+          "Full name": "David Wilson",
+          "Job title": "CTO",
+          "Company": "Innovative Tech",
+          "Emails": "david@innovativetech.co",
+          "Phone numbers": "555-567-8901"
+        },
+        {
+          "Full name": "Jennifer Taylor",
+          "Job title": "HR Manager",
+          "Company": "Global Enterprises",
+          "Emails": "jtaylor@globalent.com",
+          "Phone numbers": "555-678-9012"
+        },
+        {
+          "Full name": "Robert Garcia",
+          "Job title": "Data Scientist",
+          "Company": "Analytics Pro",
+          "Emails": "robert@analyticspro.ai",
+          "Phone numbers": "555-789-0123"
+        },
+        {
+          "Full name": "Lisa Martinez",
+          "Job title": "Operations Manager",
+          "Company": "Logistics Plus",
+          "Emails": "lmartinez@logisticsplus.com",
+          "Phone numbers": "555-890-1234"
+        },
+        {
+          "Full name": "Thomas Anderson",
+          "Job title": "Frontend Developer",
+          "Company": "Web Solutions",
+          "Emails": "tanderson@websolutions.dev",
+          "Phone numbers": "555-901-2345"
+        },
+        {
+          "Full name": "Michelle Lee",
+          "Job title": "Digital Marketer",
+          "Company": "Growth Hackers",
+          "Emails": "michelle@growthhackers.io",
+          "Phone numbers": "555-012-3456"
+        },
+        {
+          "Full name": "Kevin Moore",
+          "Job title": "Backend Engineer",
+          "Company": "Server Solutions",
+          "Emails": "kevin@serversolutions.net",
+          "Phone numbers": "555-123-4567"
+        },
+        {
+          "Full name": "Amanda Clark",
+          "Job title": "Social Media Manager",
+          "Company": "Viral Brands",
+          "Emails": "amanda@viralbrands.co",
+          "Phone numbers": "555-234-5678"
+        },
+        {
+          "Full name": "Christopher Wright",
+          "Job title": "Project Manager",
+          "Company": "Delivery Masters",
+          "Emails": "chris@deliverymasters.com",
+          "Phone numbers": "555-345-6789"
         }
       ]);
-      setTotalResults(3);
+      setTotalResults(15);
       setResultsLoading(false);
     }, 1500);
   };
@@ -535,6 +619,8 @@ function SearchApp() {
           searchResults={searchResults}
           totalResults={totalResults}
           searchLimit={searchLimit}
+          handleBack={handleBack}
+          onReset={handleResetSearch}
         />;
       default:
         return <SearchStepOne 
@@ -549,7 +635,7 @@ function SearchApp() {
       <Navbar />
       
       {/* Global Guide component */}
-      {!manualMode && getGuideContent() && (
+      {!manualMode && getGuideContent() && currentStep !== 3 && (
         <Guide 
           isVisible={true}
           defaultOpen={guideOpen}
@@ -560,8 +646,32 @@ function SearchApp() {
       
       {/* UI overlay elements that don't affect layout */}
       <div className="absolute top-0 right-0 bottom-0 left-0 pointer-events-none">
-        {/* Step Badges - use standalone component with direct context access */}
-        {!manualMode && currentStep < 4 && <StepBadges />}
+        {/* Step Badges - implemented directly with context access */}
+        {!manualMode && currentStep < 3 && (
+          <div className="fixed top-20 left-4 flex flex-col gap-2 z-10 pointer-events-auto">
+            {[1, 2, 3].map((step) => (
+              <motion.button
+                key={step}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => {
+                  // Only allow navigation to completed steps
+                  if (step <= currentStep) {
+                    setCurrentStep(step - 1);
+                  }
+                }}
+                className={`px-3 py-1 rounded-full text-sm ${
+                  step <= currentStep
+                    ? "bg-green-500/20 text-green-700 cursor-pointer hover:bg-green-500/30"
+                    : "bg-gray-500/20 text-gray-500 cursor-not-allowed"
+                }`}
+                disabled={step > currentStep}
+              >
+                Step {step}
+              </motion.button>
+            ))}
+          </div>
+        )}
       </div>
       
       {/* Main content area with search or manual search */}
@@ -569,11 +679,19 @@ function SearchApp() {
         {manualMode ? (
           <ManualSearch />
         ) : (
-          <main className="flex-1 flex flex-col items-center px-4 mt-72">
+          <main className={`flex-1 flex flex-col items-center px-4 ${currentStep === 3 ? 'mt-20' : 'mt-72'}`}>
             {/* Fixed position container for consistent input placement */}
-            <div className="w-full max-w-[690px]">
+            <div className={`w-full ${currentStep === 3 ? 'max-w-[900px]' : 'max-w-[690px]'}`}>
               <AnimatePresence mode="wait">
-                {renderSearchStep()}
+                <motion.div 
+                  key={currentStep}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4 }}
+                >
+                  {renderSearchStep()}
+                </motion.div>
               </AnimatePresence>
             </div>
           </main>
