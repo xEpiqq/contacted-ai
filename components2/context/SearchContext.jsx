@@ -46,6 +46,7 @@ export const SearchContextProvider = ({ children }) => {
   
   /* ---------- user data states ---------- */
   const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [creditsRemaining, setCreditsRemaining] = useState(2482);
 
   // Function to navigate to a specific step
@@ -66,18 +67,20 @@ export const SearchContextProvider = ({ children }) => {
           setUser(data.user);
           
           // Fetch user profile from profiles table
-          const { data: profile } = await supabase
+          const { data: profileData } = await supabase
             .from('profiles')
             .select('*')
             .eq('user_id', data.user.id)
             .single();
             
-          if (profile) {
+          if (profileData) {
+            setProfile(profileData);
+            
             // Calculate credits
-            const subscriptionUsed = profile.tokens_used || 0;
-            const subscriptionTotal = profile.tokens_total || 0;
-            const oneTime = profile.one_time_credits || 0;
-            const oneTimeUsed = profile.one_time_credits_used || 0;
+            const subscriptionUsed = profileData.tokens_used || 0;
+            const subscriptionTotal = profileData.tokens_total || 0;
+            const oneTime = profileData.one_time_credits || 0;
+            const oneTimeUsed = profileData.one_time_credits_used || 0;
             
             const totalUsed = subscriptionUsed + oneTimeUsed;
             const totalAll = subscriptionTotal + oneTime;
@@ -165,6 +168,7 @@ export const SearchContextProvider = ({ children }) => {
     
     // User Data
     user, setUser,
+    profile, setProfile,
     creditsRemaining, setCreditsRemaining,
     
     // Functions

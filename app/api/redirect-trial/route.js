@@ -43,7 +43,7 @@ export async function GET(request) {
           trial_period_days: 14,
         },
         success_url: `${origin}/trial-stripe-success`,
-        cancel_url: `${origin}/protected/usa`,
+        cancel_url: `${origin}/`,
       });
 
       // Do not update trial_pending here.
@@ -54,6 +54,6 @@ export async function GET(request) {
     }
   } else {
     // If trial is not pending, simply redirect to the dashboard
-    return NextResponse.redirect(`${origin}/protected/usa`, { status: 302 });
+    return NextResponse.redirect(`${origin}/`, { status: 302 });
   }
 }

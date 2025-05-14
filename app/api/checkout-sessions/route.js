@@ -94,30 +94,20 @@ import stripe from "@/lib/stripe";
 import { createClient } from "@/utils/supabase/server";
 
 const PLAN_INFO = {
-  [process.env.NEXT_PUBLIC_PLAN1_PRICE_ID]: {
-    label: "$79 – 20,000 Credits (One-time)",
-    tokens: 20000,
-    isRecurring: false, // important: false for one-time
-  },
   [process.env.NEXT_PUBLIC_PLAN2_PRICE_ID]: {
-    label: "$97/month – 50,000 Credits",
-    tokens: 50000,
+    label: "$99/month – 20,000 Credits",
+    tokens: 20000,
     isRecurring: true,
   },
   [process.env.NEXT_PUBLIC_PLAN3_PRICE_ID]: {
-    label: "$197/month – 200,000 Credits",
-    tokens: 200000,
+    label: "$199/month – 50,000 Credits",
+    tokens: 50000,
     isRecurring: true,
   },
   [process.env.NEXT_PUBLIC_PLAN4_PRICE_ID]: {
-    label: "$297/month – Unlimited Credits",
-    tokens: 9999999,
+    label: "$297/month – 200,000 Credits",
+    tokens: 200000,
     isRecurring: true,
-  },
-  [process.env.NEXT_PUBLIC_PLAN6_PRICE_ID]: {
-    label: "$1 – 5,000 Credits (One-time)",
-    tokens: 5000,
-    isRecurring: false,
   },
 };
 
@@ -129,23 +119,6 @@ export async function POST(request) {
     }
     if (!PLAN_INFO[priceId]) {
       return NextResponse.json({ error: "Invalid plan priceId" }, { status: 400 });
-    }
-
-    // Extra check: If the plan is the $1 offer, verify if the user already purchased it.
-    if (priceId === process.env.NEXT_PUBLIC_PLAN6_PRICE_ID) {
-      const supabaseCheck = await createClient();
-      const { data: profile, error: profileErr } = await supabaseCheck
-        .from("profiles")
-        .select("one_dollar_offer_purchased")
-        .eq("user_id", userId)
-        .single();
-      if (profileErr) {
-        console.error("Error fetching profile for one-dollar offer check:", profileErr);
-        return NextResponse.json({ error: "Error verifying offer eligibility" }, { status: 500 });
-      }
-      if (profile && profile.one_dollar_offer_purchased) {
-        return NextResponse.json({ error: "Exclusive $1 offer already purchased" }, { status: 400 });
-      }
     }
 
     // 1) Auth: ensure valid session user
@@ -183,7 +156,7 @@ export async function POST(request) {
       }/api/stripe-success`,
       cancel_url: `${
         process.env.NEXT_PUBLIC_DOMAIN || "http://localhost:3000"
-      }/protected/usa`,
+      }/`,
     });
 
     return NextResponse.json({ sessionId: session.id });

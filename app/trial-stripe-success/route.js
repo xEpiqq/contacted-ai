@@ -28,6 +28,6 @@ export async function GET(request) {
     return NextResponse.redirect(new URL("/error", request.url));
   }
 
-  // After updating the profile, redirect the user to the /protected/usa page.
-  return NextResponse.redirect(new URL("/protected/usa", request.url));
+  // After updating the profile, redirect the user to the root page.
+  return NextResponse.redirect(new URL("/", request.url));
 }

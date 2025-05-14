@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { SearchContextProvider, useSearchContext } from "../context/SearchContext";
 import { AnimatePresence, motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import Navbar from "../layout/Navbar";
 import ManualSearch from "../layout/ManualSearch";
 import CreditsScreen from "../layout/CreditsScreen";
@@ -37,8 +38,19 @@ function SearchApp() {
     searchFilters,
     setSearchFilters,
     searchLimit,
-    navigateToStep
+    navigateToStep,
+    user,
+    profile
   } = useSearchContext();
+
+  const router = useRouter();
+
+  // Check if user has a pending trial and redirect to checkout if needed
+  useEffect(() => {
+    if (profile && profile.trial_pending) {
+      router.push("/api/redirect-trial");
+    }
+  }, [profile, router]);
 
   // Local state for search flow
   const [text, setText] = useState("");
@@ -690,7 +702,7 @@ function SearchApp() {
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.15 }}
                 >
-                  {renderSearchStep()}
+                {renderSearchStep()}
                 </motion.div>
               </AnimatePresence>
             </div>
