@@ -4,6 +4,7 @@ import { encodedRedirect } from "@/utils/utils";
 import { createClient } from "@/utils/supabase/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import stripe from "@/lib/stripe";
 
 export const signUpAction = async (formData: FormData) => {
   const email = formData.get("email")?.toString();
@@ -44,13 +45,54 @@ export const signInAction = async (formData: FormData) => {
   const password = formData.get("password") as string;
   const supabase = await createClient();
 
-  const { error } = await supabase.auth.signInWithPassword({
+  const { error, data } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
 
   if (error) {
     return encodedRedirect("error", "/sign-in", error.message);
+  }
+
+  // Check if user has a profile in the profiles table
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("user_id", data.user.id)
+    .single();
+
+  // If no profile exists, create one
+  if (profileError || !profile) {
+    let stripeCustomerId = "";
+    try {
+      const customer = await stripe.customers.create({
+        email: data.user.email,
+        metadata: { supabase_user_id: data.user.id },
+      });
+      stripeCustomerId = customer.id;
+    } catch (err) {
+      console.error("Error creating Stripe customer:", err);
+    }
+
+    // Create a new profile
+    const { error: insertError } = await supabase
+      .from("profiles")
+      .insert({
+        user_id: data.user.id,
+        email: data.user.email,
+        plan: "trial",
+        tokens_used: 0,
+        tokens_total: 0,
+        one_time_credits: 10000,
+        avatar_url: "default/default.png",
+        stripe_customer_id: stripeCustomerId,
+        trial_pending: true,
+      });
+
+    if (insertError) {
+      console.error("Error creating profile:", insertError);
+      return encodedRedirect("error", "/sign-in", "Error creating user profile");
+    }
   }
 
   return redirect("/");
@@ -141,6 +183,9 @@ export const signInWithGoogleAction = async () => {
     provider: 'google',
     options: {
       redirectTo: `${origin}/auth/callback`,
+      queryParams: {
+        prompt: 'consent',
+      }
     },
   });
 
