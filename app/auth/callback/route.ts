@@ -7,11 +7,11 @@ export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const type = url.searchParams.get("type"); // e.g., "recovery", "signup"
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || url.origin;
+  const origin = url.origin;
   const redirectTo = url.searchParams.get("redirect_to") ?? "/";
 
   if (!code) {
-    return NextResponse.redirect(`${siteUrl}/error`);
+    return NextResponse.redirect(`${origin}/error`);
   }
 
   const supabase = await createClient();
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
   if (error || !data?.session) {
     console.error("Error confirming user:", error?.message);
-    return NextResponse.redirect(`${siteUrl}/error`);
+    return NextResponse.redirect(`${origin}/error`);
   }
 
   let profileData = null;
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
 
       if (profileError) {
         console.error("Error inserting new profile:", profileError.message);
-        return NextResponse.redirect(`${siteUrl}/error`);
+        return NextResponse.redirect(`${origin}/error`);
       }
       profileData = newProfile;
     }
@@ -91,22 +91,22 @@ export async function GET(request: NextRequest) {
         subscription_data: {
           trial_period_days: 14,
         },
-        success_url: `${siteUrl}/trial-stripe-success`,
-        cancel_url: `${siteUrl}/`,
+        success_url: `${origin}/trial-stripe-success`,
+        cancel_url: `${origin}/`,
       });
 
       // Do NOT update trial_pending here.
       if (session.url) {
         return NextResponse.redirect(session.url);
       } else {
-        return NextResponse.redirect(`${siteUrl}/error?reason=checkout_failed`);
+        return NextResponse.redirect(`${origin}/error?reason=checkout_failed`);
       }
     } catch (err) {
       console.error("Error creating Stripe checkout session:", err);
-      return NextResponse.redirect(`${siteUrl}/error`);
+      return NextResponse.redirect(`${origin}/error`);
     }
   }
 
   // For recovery flows or if no trial is pending, simply redirect to the protected page.
-  return NextResponse.redirect(`${siteUrl}${redirectTo}`);
+  return NextResponse.redirect(`${origin}${redirectTo}`);
 }
