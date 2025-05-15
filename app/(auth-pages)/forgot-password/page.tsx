@@ -19,29 +19,29 @@ export default async function ForgotPassword(props: {
             </div>
             <h2 className="text-3xl font-bold text-white mb-1">Reset password</h2>
             <p className="text-neutral-400">Enter your email and we'll send you a reset link</p>
-          </div>
+        </div>
           
           <form className="space-y-5">
             <div className="space-y-1.5">
               <label htmlFor="email" className="text-sm font-medium text-neutral-400">Email</label>
-              <input 
-                name="email" 
-                type="email"
-                placeholder="you@example.com" 
-                required 
+          <input 
+            name="email" 
+            type="email" 
+            placeholder="you@example.com" 
+            required 
                 className="w-full px-4 py-3 rounded-md bg-[#303030] border border-[#404040] text-white placeholder:text-neutral-600 focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500"
-              />
+          />
             </div>
             
-            <button 
+          <button 
               className="w-full bg-green-500 hover:bg-green-600 text-black font-medium py-3 px-4 rounded-md transition-colors mt-4"
               type="submit"
-              formAction={forgotPasswordAction}
-            >
+            formAction={forgotPasswordAction}
+          >
               Send Reset Link
-            </button>
+          </button>
             
-            <FormMessage message={searchParams} />
+          <FormMessage message={searchParams} />
             
             <div className="mt-6 text-center">
               <p className="text-sm text-neutral-400">

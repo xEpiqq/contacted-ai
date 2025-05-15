@@ -40,43 +40,43 @@ export default async function Login(props: { searchParams: Promise<Message> }) {
           <form className="space-y-5">
             <div className="space-y-1.5">
               <label htmlFor="email" className="text-sm font-medium text-neutral-400">Email</label>
-              <input 
-                name="email" 
+        <input 
+          name="email" 
                 type="email"
-                placeholder="you@example.com" 
-                required 
+          placeholder="you@example.com" 
+          required 
                 className="w-full px-4 py-3 rounded-md bg-[#303030] border border-[#404040] text-white placeholder:text-neutral-600 focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500"
-              />
+        />
             </div>
             
             <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center">
                 <label htmlFor="password" className="text-sm font-medium text-neutral-400">Password</label>
-                <Link
+          <Link
                   className="text-xs text-neutral-400 hover:text-green-500 transition-colors"
-                  href="/forgot-password"
-                >
+            href="/forgot-password"
+          >
                   Forgot password?
-                </Link>
-              </div>
-              <input
-                type="password"
-                name="password"
+          </Link>
+        </div>
+        <input
+          type="password"
+          name="password"
                 placeholder="••••••••••••" 
-                required
+          required
                 className="w-full px-4 py-3 rounded-md bg-[#303030] border border-[#404040] text-white placeholder:text-neutral-600 focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500"
-              />
+        />
             </div>
 
-            <button 
+        <button 
               className="w-full bg-green-500 hover:bg-green-600 text-black font-medium py-3 px-4 rounded-md transition-colors"
-              type="submit"
-              formAction={signInAction}
-            >
+          type="submit"
+          formAction={signInAction}
+        >
               Sign In
-            </button>
+        </button>
             
-            <FormMessage message={searchParams} />
+        <FormMessage message={searchParams} />
             
             <div className="mt-6 text-center">
               <p className="text-sm text-neutral-400">
