@@ -1,9 +1,9 @@
 // /app/auth/callback/route.js
 import { createClient } from "@/utils/supabase/server";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import stripe from "@/lib/stripe";
 
-export async function GET(request) {
+export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const type = url.searchParams.get("type"); // e.g., "recovery", "signup"
@@ -96,7 +96,11 @@ export async function GET(request) {
       });
 
       // Do NOT update trial_pending here.
-      return NextResponse.redirect(session.url);
+      if (session.url) {
+        return NextResponse.redirect(session.url);
+      } else {
+        return NextResponse.redirect(`${origin}/error?reason=checkout_failed`);
+      }
     } catch (err) {
       console.error("Error creating Stripe checkout session:", err);
       return NextResponse.redirect(`${origin}/error`);
