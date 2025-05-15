@@ -131,12 +131,20 @@ export default function OnboardingPage() {
           >
             Contact support
           </Link>
-          <Link 
-            href="/privacy-policy" 
-            className="text-green-500 hover:text-green-400 transition-colors"
-          >
-            Privacy Policy
-          </Link>
+          <div className="flex gap-x-4">
+            <Link 
+              href="/privacy-policy" 
+              className="text-green-500 hover:text-green-400 transition-colors"
+            >
+              Privacy Policy
+            </Link>
+            <Link 
+              href="/terms-of-service" 
+              className="text-green-500 hover:text-green-400 transition-colors"
+            >
+              Terms of Service
+            </Link>
+          </div>
         </div>
       </div>
 
