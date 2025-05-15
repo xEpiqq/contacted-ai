@@ -3,20 +3,20 @@ import Link from "next/link";
 
 export function SmtpMessage() {
   return (
-    <div className="bg-muted/50 px-5 py-3 border rounded-md flex gap-4">
-      <InfoIcon size={16} className="mt-0.5" />
+    <div className="flex gap-3">
+      <InfoIcon size={16} className="text-zinc-500 mt-0.5 flex-shrink-0" />
       <div className="flex flex-col gap-1">
-        <small className="text-sm text-secondary-foreground">
-          <strong> Note:</strong> Emails are rate limited. Enable Custom SMTP to
+        <small className="text-sm text-zinc-400">
+          <strong className="text-zinc-300">Note:</strong> Emails are rate limited. Enable Custom SMTP to
           increase the rate limit.
         </small>
         <div>
           <Link
             href="https://supabase.com/docs/guides/auth/auth-smtp"
             target="_blank"
-            className="text-primary/50 hover:text-primary flex items-center text-sm gap-1"
+            className="text-green-500/80 hover:text-green-400 flex items-center text-xs gap-1 transition-colors"
           >
-            Learn more <ArrowUpRight size={14} />
+            Learn more <ArrowUpRight size={12} />
           </Link>
         </div>
       </div>
