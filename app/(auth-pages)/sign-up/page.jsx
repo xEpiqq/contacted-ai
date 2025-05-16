@@ -3,9 +3,7 @@ import { FormMessage, Message } from "@/components/form-message";
 import Link from "next/link";
 import Image from "next/image";
 
-export default async function Signup(props: {
-  searchParams: Promise<Message>;
-}) {
+export default async function Signup(props) {
   const searchParams = await props.searchParams;
   if ("message" in searchParams) {
     return (
@@ -127,4 +125,4 @@ export default async function Signup(props: {
       </div>
     </>
   );
-}
+} 

@@ -3,7 +3,7 @@ import { FormMessage, Message } from "@/components/form-message";
 import Link from "next/link";
 import Image from "next/image";
 
-export default async function Login(props: { searchParams: Promise<Message> }) {
+export default async function Login(props) {
   const searchParams = await props.searchParams;
   return (
     <>
@@ -124,4 +124,4 @@ export default async function Login(props: { searchParams: Promise<Message> }) {
       </div>
     </>
   );
-}
+} 

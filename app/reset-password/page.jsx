@@ -1,14 +1,12 @@
 import { Message, FormMessage } from "@/components/form-message";
 import Link from "next/link";
 
-export default async function ResetPasswordPage(props: {
-  searchParams: Promise<Message>;
-}) {
+export default async function ResetPasswordPage(props) {
   const searchParams = await props.searchParams;
   
   // Placeholder for the actual reset password action function
   // You'll need to replace this with the actual implementation
-  const handleResetPassword = async (formData: FormData) => {
+  const handleResetPassword = async (formData) => {
     'use server';
     // Implement password reset logic
   };
