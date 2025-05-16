@@ -1,133 +1,94 @@
 "use client";
-
-import React, { useState, useRef, useEffect } from "react";
-import { useSearchContext } from "../context/SearchContext";
-import { motion } from "framer-motion";
-import { ChevronLeftIcon, Search, ListFilter, CheckCircle, PlusCircle, Trash2, Loader } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
 import { Combobox } from "@headlessui/react";
-import { ChevronUpDownIcon } from "@heroicons/react/24/solid";
+import { ChevronUpDownIcon, ChevronDownIcon } from "@heroicons/react/24/solid";
+import { createClient } from "@/utils/supabase/client";
 
-// TokensInput component embedded directly
+// Database table configurations
+const DB_TABLES = [
+  {
+    id: "usa4_new_v2",
+    name: "USA Job DB",
+    defaultColumns: ['Full name', 'Job title', 'Emails', 'Phone numbers'],
+    totalCount: 31177584
+  },
+  {
+    id: "deez_3_v3",
+    name: "USA Local Biz DB",
+    defaultColumns: ['search_keyword', 'name', 'phone', 'email', 'website'],
+    totalCount: 4908756
+  },
+  {
+    id: "pdl4_new_v2",
+    name: "People DB",
+    defaultColumns: ['name', 'linkedin_url', 'email', 'phone_number'],
+    totalCount: 129528353
+  },
+  {
+    id: "otc1_new_v2",
+    name: "World Job DB",
+    defaultColumns: ['full_name', 'job_title', 'email', 'phone_number'],
+    totalCount: 47352973
+  }
+];
+
+/** Format large numbers with commas */
+function formatNumber(num) {
+  return new Intl.NumberFormat().format(num);
+}
+
+/**
+ * A tokens input with auto-suggest from distinct values.
+ */
 function TokensInput({
-  tokens = [],
+  tokens,
   setTokens,
-  pendingText = "",
+  pendingText,
   setPendingText,
-  column = "",
-  tableName = "usa4_new_v2"
+  column,
+  tableName,
 }) {
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
   const dropdownRef = useRef(null);
 
-  // Fetch suggestions from API
-  const fetchSuggestions = async () => {
-    if (!column || column === "") return;
-    
-    setIsLoading(true);
+  // Show suggestions as user types (filtered by `pendingText`)
+  const filteredSuggestions = suggestions.filter((s) =>
+    s.toLowerCase().includes(pendingText.toLowerCase())
+  );
+
+  async function fetchSuggestions() {
+    if (!column || !tableName) return;
     try {
+      setIsFetching(true);
       const params = new URLSearchParams({
         table_name: tableName,
         column,
-        limit: "30" // Limit to prevent overwhelming the UI
+        limit: "100",
       });
-      
-      // Mock API response for demo purposes
-      // In real implementation, this would be a fetch call to your API
-      // const response = await fetch(`/api/public-people/distinct-values?${params}`);
-      // const data = await response.json();
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Mock response based on column
-      let mockSuggestions = [];
-      if (column === "Job title") {
-        mockSuggestions = [
-          "Software Engineer", 
-          "Product Manager", 
-          "Marketing Director", 
-          "CEO", 
-          "CFO", 
-          "CTO",
-          "Sales Representative",
-          "Account Manager",
-          "Director of Operations",
-          "HR Manager"
-        ];
-      } else if (column === "Industry") {
-        mockSuggestions = [
-          "Technology",
-          "Healthcare",
-          "Finance",
-          "Education",
-          "Manufacturing",
-          "Retail",
-          "Construction",
-          "Transportation",
-          "Energy",
-          "Hospitality"
-        ];
-      } else if (column === "Company") {
-        mockSuggestions = [
-          "Google",
-          "Microsoft",
-          "Apple",
-          "Amazon",
-          "Facebook",
-          "Netflix",
-          "Tesla",
-          "IBM",
-          "Oracle",
-          "Salesforce"
-        ];
-      } else if (column === "State") {
-        mockSuggestions = [
-          "California",
-          "New York",
-          "Texas",
-          "Florida",
-          "Illinois",
-          "Pennsylvania",
-          "Ohio",
-          "Michigan",
-          "Georgia",
-          "North Carolina"
-        ];
-      } else {
-        mockSuggestions = [
-          "Value 1",
-          "Example 2",
-          "Sample 3",
-          "Test 4",
-          "Demo 5"
-        ];
+      const res = await fetch(`/api/people/distinct-values?${params}`);
+      const json = await res.json();
+      if (res.ok && json.distinctValues) {
+        setSuggestions(json.distinctValues);
       }
-      
-      setSuggestions(mockSuggestions);
-    } catch (error) {
-      console.error("Error fetching suggestions:", error);
-      setSuggestions([]);
+    } catch (err) {
+      console.error("Suggestions fetch error:", err);
     } finally {
-      setIsLoading(false);
+      setIsFetching(false);
     }
-  };
+  }
 
-  // Filter suggestions based on pendingText
-  const filtered = suggestions
-    .filter(s => s && s.toLowerCase().includes(pendingText.toLowerCase()))
-    .slice(0, 10); // Limit to 10 visible results for better performance
-
-  /* Handlers */
   function handleFocus() {
     setShowSuggestions(true);
-    if (suggestions.length === 0) {
+    // Show the dropdown right away, with a spinner:
+    if (!suggestions.length) {
       fetchSuggestions();
     }
   }
-  
+
   function handleBlur() {
+    // Delay a bit so that if the user clicks a suggestion, we won't close immediately
     setTimeout(() => {
       if (
         !dropdownRef.current ||
@@ -137,7 +98,7 @@ function TokensInput({
       }
     }, 150);
   }
-  
+
   function handleKeyDown(e) {
     if (e.key === "Enter" && pendingText.trim() !== "") {
       e.preventDefault();
@@ -145,80 +106,93 @@ function TokensInput({
       setPendingText("");
     }
   }
-  
-  function addToken(tok) {
-    if (tok && !tokens.includes(tok)) setTokens([...tokens, tok]);
-  }
-  
-  function removeToken(tok) {
-    setTokens(tokens.filter((t) => t !== tok));
-  }
 
-  // Fetch new suggestions when column changes
-  useEffect(() => {
-    setSuggestions([]);
-    if (column) {
-      fetchSuggestions();
+  function addToken(token) {
+    if (token && !tokens.includes(token)) {
+      setTokens([...tokens, token]);
     }
-  }, [column]);
+  }
 
-  /* Render */
+  function removeToken(token) {
+    setTokens(tokens.filter((t) => t !== token));
+  }
+
   return (
     <div className="relative">
-      {/* tokens */}
+      {/* Display existing tokens */}
       <div className="flex flex-wrap gap-2 mb-2">
-        {tokens.map((t, i) => (
-          <div 
-            key={i} 
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[#303030] text-sm text-blue-400 border border-blue-900/30"
-          >
-            <span>{t}</span>
+        {tokens.map((token, idx) => (
+          <div key={idx} className="bg-blue-600/10 border border-blue-500/20 text-blue-500 text-sm px-2 py-1 rounded-md flex items-center gap-2">
+            <span>{token}</span>
             <button
-              onClick={() => removeToken(t)}
-              className="text-neutral-500 hover:text-neutral-300 leading-none"
+              onClick={() => removeToken(token)}
+              className="text-blue-500 hover:text-blue-700"
             >
               ×
             </button>
           </div>
         ))}
       </div>
-      <div className="flex items-center bg-[#252525] border border-[#3a3a3a] rounded-md overflow-hidden">
-        <input
-          value={pendingText}
-          onChange={(e) => setPendingText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          placeholder="Type a value and press Enter"
-          className="flex-1 bg-transparent px-3 py-2 text-sm focus:outline-none text-neutral-200"
-        />
-      </div>
+
+      {/* Input for new token */}
+      <input
+        type="text"
+        value={pendingText}
+        onChange={(e) => setPendingText(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        placeholder="Search (Enter to add new)"
+        className="w-full bg-[#212121] border border-[#404040] rounded-md px-3 py-2 text-white placeholder:text-neutral-600 focus:outline-none focus:border-green-500"
+      />
+
+      {/* Suggestions dropdown */}
       {showSuggestions && (
         <div
           ref={dropdownRef}
-          className="absolute z-10 mt-1 w-full bg-[#252525] border border-[#3a3a3a] rounded-md shadow-md max-h-48 overflow-auto"
+          className="absolute z-10 mt-1 w-full bg-[#252525] border border-[#404040] rounded-md shadow-md max-h-48 overflow-auto"
         >
-          {isLoading ? (
-            <div className="p-3 text-sm text-neutral-500 flex items-center justify-center">
-              <div className="h-4 w-4 border-2 border-t-blue-500 border-blue-200 rounded-full animate-spin mr-2"></div>
-              Loading suggestions...
+          {isFetching ? (
+            <div className="p-3 text-sm text-neutral-400 flex items-center gap-2">
+              {/* Simple loading spinner */}
+              <svg
+                className="h-4 w-4 animate-spin mr-2 text-neutral-500"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v8H4z"
+                ></path>
+              </svg>
+              <span>Loading suggestions...</span>
             </div>
-          ) : filtered.length > 0 ? (
-            filtered.map((item, i) => (
+          ) : filteredSuggestions.length > 0 ? (
+            filteredSuggestions.map((item, i) => (
               <div
                 key={i}
                 onMouseDown={(e) => {
-                  e.preventDefault();
+                  e.preventDefault(); // Prevent losing focus
                   addToken(item);
                 }}
-                className="px-3 py-2 text-sm cursor-pointer hover:bg-[#303030] text-neutral-200"
+                className="px-3 py-2 cursor-pointer hover:bg-[#333333] text-sm text-white"
               >
                 {item}
               </div>
             ))
           ) : (
-            <div className="p-3 text-sm text-neutral-500">
-              {pendingText ? "No matching suggestions" : "Start typing to search"}
+            <div className="p-3 text-sm text-neutral-400">
+              No suggestions found.
             </div>
           )}
         </div>
@@ -227,463 +201,938 @@ function TokensInput({
   );
 }
 
-function ManualSearch() {
-  const {
-    pendingSearchFilters,
-    setPendingSearchFilters,
-    searchFilters,
-    searchResults,
-    resultsLoading,
-    searchPage,
-    totalResults,
-    totalPages,
-    searchLimit,
-    setManualMode,
-    fetchSearchResults
-  } = useSearchContext();
+export default function ManualSearch() {
+  // Table selection state
+  const [selectedTable, setSelectedTable] = useState(DB_TABLES[0]);
+  const [tableDropdownOpen, setTableDropdownOpen] = useState(false);
 
-  // Available columns for search - these match what's actually in the database
-  const columns = [
-    "Full name",
-    "Job title",
-    "Emails",
-    "Phone numbers",
-    "Company",
-    "City",
-    "State",
-    "Industry",
-    "LinkedIn URL"
-  ];
+  // Data + Pagination
+  const [results, setResults] = useState([]);
+  const [matchingCount, setMatchingCount] = useState(0);
+  const [limit, setLimit] = useState(50);
+  const [page, setPage] = useState(0);
+  const offset = page * limit;
 
-  // Available conditions for filters
-  const conditions = [
-    "contains",
-    "does not contain",
-    "is exactly",
-    "is not",
-    "is empty",
-    "is not empty"
-  ];
+  // Filters
+  const [filters, setFilters] = useState([]);
+  const [pendingFilters, setPendingFilters] = useState([]);
 
-  // Available subops (AND/OR/WHERE) for filter lines
-  const subops = ["WHERE", "AND", "OR"];
+  // Columns
+  const [availableColumns, setAvailableColumns] = useState([]);
+  const [visibleColumns, setVisibleColumns] = useState([]);
+  const [columnWidths, setColumnWidths] = useState({});
 
-  // Handle exit from manual mode
-  const onExit = () => {
-    setManualMode(false);
+  // User Settings Load State (important fix)
+  const [userSettingsLoaded, setUserSettingsLoaded] = useState(false);
+
+  // Column & Filter Modals
+  const [showColumnSelectorModal, setShowColumnSelectorModal] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+
+  // Searching columns in Column Modal
+  const [columnSearch, setColumnSearch] = useState("");
+
+  // SSE Export
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  const [rowsToExport, setRowsToExport] = useState("");
+  const [exportError, setExportError] = useState("");
+  const [exportDone, setExportDone] = useState(false);
+
+  // Loading states
+  const [rowsLoading, setRowsLoading] = useState(false);
+  const [countLoading, setCountLoading] = useState(false);
+
+  // Filter combobox for single line
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Store the user's tokens_total for deciding pagination limit
+  const [tokensTotal, setTokensTotal] = useState(null);
+
+  // Handle click outside dropdown
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (tableDropdownOpen) {
+        setTableDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [tableDropdownOpen]);
+
+  // On mount, fetch user tokens_total
+  useEffect(() => {
+    const supa = createClient();
+    supa.auth.getUser().then(async ({ data }) => {
+      if (data?.user) {
+        const { data: profileData } = await supa
+          .from("profiles")
+          .select("tokens_total")
+          .eq("user_id", data.user.id)
+          .single();
+        if (profileData) {
+          setTokensTotal(profileData.tokens_total);
+        }
+      }
+    });
+  }, []);
+
+  // ------------------------
+  //    On mount or table change
+  // ------------------------
+  useEffect(() => {
+    resetStateForNewTable();
+    fetchUserSettingsAndColumns();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTable]);
+
+  const resetStateForNewTable = () => {
+    setResults([]);
+    setMatchingCount(0);
+    setPage(0);
+    setFilters([]);
+    setPendingFilters([]);
+    setAvailableColumns([]);
+    setVisibleColumns([]);
+    setColumnWidths({});
+    setUserSettingsLoaded(false);
   };
-  
-  // Apply filters and search
-  const onApplyFilters = () => {
-    // Update the actual search filters from pending
-    fetchSearchResults(0);
-  };
-  
-  // Add new filter line
-  const addFilterLine = () => {
-    setPendingSearchFilters([
-      ...pendingSearchFilters,
+
+  // Only fetch rows if userSettingsLoaded is true
+  // and filters changes => set page=0 => fetch rows & maybe count
+  useEffect(() => {
+    if (!userSettingsLoaded) return;
+    setPage(0);
+    if (filters.length > 0) {
+      parallelFetchRowsAndCount(0);
+    } else {
+      // If no filters, just fetch some rows, and reset matchingCount
+      fetchRows(0);
+      setMatchingCount(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, userSettingsLoaded]);
+
+  // Whenever page changes => fetch rows, only if userSettingsLoaded
+  useEffect(() => {
+    if (!userSettingsLoaded) return;
+    fetchRows(offset);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, offset, userSettingsLoaded]);
+
+  // ------------------------
+  //    API Calls
+  // ------------------------
+  async function fetchUserSettingsAndColumns() {
+    try {
+      const res = await fetch(`/api/people/columns?table_name=${selectedTable.id}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load columns");
+
+      const cols = data.columns || [];
+      const userCols = data.userColumns || [];
+      const userFilters = data.userFilters || [];
+
+      setAvailableColumns(cols);
+
+      // If user has saved columns => use them
+      if (userCols.length) {
+        setVisibleColumns(userCols);
+      } else {
+        // Otherwise, do default intersection or fallback
+        const intersection = selectedTable.defaultColumns.filter((c) => cols.includes(c));
+        const newVisible =
+          intersection.length > 0
+            ? intersection
+            : cols.slice(0, Math.min(cols.length, 5));
+        setVisibleColumns(newVisible);
+      }
+
+      // If user has saved filters => set them
+      if (userFilters.length) {
+        setFilters(userFilters);
+      } else {
+        setFilters([]);
+      }
+
+      // Mark user settings as loaded
+      setUserSettingsLoaded(true);
+    } catch (err) {
+      console.error("Error fetching columns & user settings:", err);
+      // Even if it failed, mark loaded so we don't get stuck forever
+      setUserSettingsLoaded(true);
+    }
+  }
+
+  async function fetchRows(currentOffset, isParallel = false) {
+    if (!isParallel) setRowsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        table_name: selectedTable.id,
+        limit: limit.toString(),
+        offset: currentOffset.toString(),
+        filters: JSON.stringify(filters),
+      });
+      const res = await fetch(`/api/people/search?${params}`);
+      const data = await res.json();
+      if (res.ok) {
+        setResults(data.results || []);
+        // Initialize columnWidths once if none present
+        if (!Object.keys(columnWidths).length && data.results?.length) {
+          const widths = {};
+          visibleColumns.forEach((c) => (widths[c] = "auto"));
+          setColumnWidths(widths);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching rows:", err);
+    }
+    if (!isParallel) setRowsLoading(false);
+  }
+
+  async function fetchMatchingCount(isParallel = false) {
+    if (!isParallel) setCountLoading(true);
+    try {
+      const params = new URLSearchParams({
+        table_name: selectedTable.id,
+        filters: JSON.stringify(filters),
+      });
+      const res = await fetch(`/api/people/search-count?${params}`);
+      const data = await res.json();
+      if (res.ok) setMatchingCount(data.matchingCount || 0);
+    } catch (err) {
+      console.error("Error fetching matching count:", err);
+    }
+    if (!isParallel) setCountLoading(false);
+  }
+
+  async function parallelFetchRowsAndCount(newOffset) {
+    setRowsLoading(true);
+    setCountLoading(true);
+    try {
+      await Promise.all([fetchRows(newOffset, true), fetchMatchingCount(true)]);
+    } catch (err) {
+      console.error("Parallel fetch error:", err);
+    }
+    setRowsLoading(false);
+    setCountLoading(false);
+  }
+
+  async function saveUserSettings(newVisibleColumns, newFilters) {
+    try {
+      await fetch(`/api/people/columns`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          table_name: selectedTable.id,
+          columns: newVisibleColumns,
+          filters: newFilters,
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to save user settings:", err);
+    }
+  }
+
+  // ------------------------
+  //    Pagination
+  // ------------------------
+  const totalPages = matchingCount > 0 ? Math.ceil(matchingCount / limit) : 1;
+
+  function nextPage() {
+    // Decide max page index based on tokensTotal (example logic)
+    const maxPageIndex =
+      tokensTotal !== null
+        ? tokensTotal <= 201
+          ? 4
+          : 24
+        : 4; // fallback 5 pages if we never loaded tokensTotal
+
+    setPage((prev) => Math.min(prev + 1, totalPages - 1, maxPageIndex));
+  }
+
+  function prevPage() {
+    setPage((prev) => Math.max(0, prev - 1));
+  }
+
+  // ------------------------
+  //    Filter Logic
+  // ------------------------
+  function openFilterModal() {
+    // Make a copy so we can discard changes if user cancels
+    setPendingFilters(JSON.parse(JSON.stringify(filters)));
+    setShowFilterModal(true);
+  }
+  function closeFilterModal() {
+    setShowFilterModal(false);
+  }
+  function addFilterLine() {
+    const isFirst = pendingFilters.length === 0;
+    setPendingFilters((prev) => [
+      ...prev,
       {
         column: "",
         condition: "contains",
         tokens: [],
         pendingText: "",
-        subop: pendingSearchFilters.length > 0 ? "AND" : "WHERE"
-      }
+        subop: isFirst ? "" : "AND",
+      },
     ]);
-  };
-  
-  // Remove filter line
-  const removeFilterLine = (i) => {
-    const newFilters = [...pendingSearchFilters];
-    newFilters.splice(i, 1);
-    
-    // Update subops if first line is removed
-    if (i === 0 && newFilters.length > 0) {
-      newFilters[0].subop = "WHERE";
-    }
-    
-    setPendingSearchFilters(newFilters);
-  };
-  
-  // Update filter line field
-  const updateFilterLine = (i, field, val) => {
-    const newFilters = [...pendingSearchFilters];
-    newFilters[i][field] = val;
-    
-    // Reset tokens when changing column
-    if (field === 'column') {
-      newFilters[i].tokens = [];
-    }
-    
-    // When switching to "is empty" or "is not empty", clear tokens
-    if (field === 'condition' && (val === 'is empty' || val === 'is not empty')) {
-      newFilters[i].tokens = [];
-    }
-    
-    setPendingSearchFilters(newFilters);
-  };
-  
-  // Update filter tokens
-  const updateFilterTokens = (i, tokens) => {
-    const newFilters = [...pendingSearchFilters];
-    newFilters[i].tokens = tokens;
-    setPendingSearchFilters(newFilters);
-  };
-  
-  // Update filter pending text
-  const updateFilterPendingText = (i, text) => {
-    const newFilters = [...pendingSearchFilters];
-    newFilters[i].pendingText = text;
-    setPendingSearchFilters(newFilters);
-  };
-  
-  // Helper to format numbers with commas
-  const formatNumber = (num) => {
-    return new Intl.NumberFormat().format(num);
-  };
+  }
+  function removeFilterLine(index) {
+    setPendingFilters((prev) => prev.filter((_, i) => i !== index));
+  }
+  function updateFilterLine(index, field, value) {
+    setPendingFilters((prev) => {
+      const arr = [...prev];
+      arr[index][field] = value;
+      return arr;
+    });
+  }
+  function updateLineSubop(index, newOp) {
+    setPendingFilters((prev) => {
+      const arr = [...prev];
+      arr[index].subop = newOp;
+      return arr;
+    });
+  }
+  function updateLineTokens(index, newTokens) {
+    setPendingFilters((prev) => {
+      const arr = [...prev];
+      arr[index].tokens = newTokens;
+      return arr;
+    });
+  }
+  function updateLinePendingText(index, txt) {
+    setPendingFilters((prev) => {
+      const arr = [...prev];
+      arr[index].pendingText = txt;
+      return arr;
+    });
+  }
 
-  // Local state for column search
-  const [columnSearch, setColumnSearch] = useState("");
+  async function applyFilters() {
+    const updated = pendingFilters.map((rule) => {
+      // If there's leftover text, add it as a token
+      if (
+        (rule.condition === "contains" || rule.condition === "equals") &&
+        rule.pendingText?.trim()
+      ) {
+        if (!rule.tokens.includes(rule.pendingText.trim())) {
+          rule.tokens.push(rule.pendingText.trim());
+        }
+      }
+      rule.pendingText = "";
+      return rule;
+    });
 
+    setFilters(updated);
+    closeFilterModal();
+    await saveUserSettings(visibleColumns, updated);
+  }
+
+  // ------------------------
+  //   Column Selection
+  // ------------------------
+  function openColumnSelectorModal() {
+    setColumnSearch("");
+    setShowColumnSelectorModal(true);
+  }
+  
+  async function closeColumnSelectorModal() {
+    setShowColumnSelectorModal(false);
+    await saveUserSettings(visibleColumns, filters);
+  }
+  
+  function toggleColumn(col) {
+    setVisibleColumns((prev) =>
+      prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]
+    );
+  }
+  
+  const filteredAvailableColumns = columnSearch
+    ? availableColumns.filter((col) =>
+        col.toLowerCase().includes(columnSearch.toLowerCase())
+      )
+    : availableColumns;
+
+  // ------------------------
+  //     SSE Export
+  // ------------------------
+  function openExportModal() {
+    setRowsToExport(matchingCount || 0);
+    setExportProgress(0);
+    setExportError("");
+    setExportDone(false);
+    setShowExportModal(true);
+  }
+  
+  function closeExportModal() {
+    setShowExportModal(false);
+  }
+
+  async function startExport() {
+    if (!rowsToExport || rowsToExport < 1) return;
+    setExportError("");
+    setExporting(true);
+    setExportProgress(0);
+    setExportDone(false);
+
+    const params = new URLSearchParams({
+      table_name: selectedTable.id,
+      filters: JSON.stringify(filters),
+      limit: rowsToExport.toString(),
+    });
+    // pass columns
+    params.append("columns", visibleColumns.join(","));
+
+    const es = new EventSource(`/api/people/export?${params}`);
+
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data || "{}");
+        if (typeof data.progress === "number") {
+          setExportProgress(data.progress);
+        }
+        if (data.error) {
+          es.close();
+          setExporting(false);
+          setExportError(data.error);
+        }
+        if (data.status === "done") {
+          es.close();
+          setExporting(false);
+          setExportProgress(100);
+          setExportDone(true);
+        }
+      } catch (err) {
+        es.close();
+        setExporting(false);
+        setExportError("Export failed");
+      }
+    };
+    es.onerror = () => {
+      es.close();
+      setExporting(false);
+      setExportError("Export failed");
+    };
+  }
+
+  // ------------------------
+  //    Render
+  // ------------------------
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.3 }}
-      className="fixed inset-0 bg-[#212121] z-20 flex flex-col"
-    >
-      <div className="flex justify-between items-center px-4 py-3 border-b border-[#404040]">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onExit}
-            className="h-8 w-8 rounded-full flex items-center justify-center bg-[#303030] hover:bg-[#3a3a3a] transition-colors"
+    <div className="w-full min-h-screen bg-[#181818] text-white">
+      {/* Header with Table Selector Dropdown */}
+      <div className="flex items-center justify-between px-4 py-3">
+        <div className="relative">
+          <div 
+            className="flex items-center gap-2 cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              setTableDropdownOpen(!tableDropdownOpen);
+            }}
           >
-            <ChevronLeftIcon className="h-4 w-4 text-neutral-400" />
-          </button>
-          <div>
-            <h1 className="text-lg font-medium text-white">Manual Search Mode</h1>
-            <p className="text-xs text-neutral-500">
-              Database: USA | 31,177,584 contacts
-              {searchFilters.length > 0 && (
-                <span className="ml-2 text-green-400">
-                  • {formatNumber(totalResults)} matching 
-                  <span className="text-neutral-400"> ({((totalResults / 31177584) * 100).toFixed(2)}%)</span>
-                </span>
-              )}
-            </p>
+            <span className="text-xl font-semibold">{selectedTable.name}</span>
+            <ChevronDownIcon className="h-5 w-5 text-neutral-400" />
           </div>
+          
+          {tableDropdownOpen && (
+            <div className="absolute z-50 mt-1 w-56 bg-[#252525] border border-[#404040] rounded-md shadow-lg">
+              {DB_TABLES.map((table) => (
+                <div
+                  key={table.id}
+                  className="px-4 py-2 hover:bg-[#303030] cursor-pointer"
+                  onClick={() => {
+                    setSelectedTable(table);
+                    setTableDropdownOpen(false);
+                  }}
+                >
+                  {table.name}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onApplyFilters}
-            disabled={resultsLoading}
-            className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-sm text-white transition-colors flex items-center gap-1"
+        
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-neutral-300">
+            Total: {formatNumber(selectedTable.totalCount)}
+          </span>
+          {filters.length > 0 && (
+            <span className="text-xs text-neutral-300">
+              Matching:{" "}
+              {countLoading ? (
+                <span className="inline-block w-10 bg-[#303030] h-4 rounded animate-pulse" />
+              ) : (
+                formatNumber(matchingCount)
+              )}
+            </span>
+          )}
+          
+          <button 
+            onClick={openColumnSelectorModal}
+            className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-xs text-white border border-[#404040] rounded-md"
           >
-            {resultsLoading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                <span>Searching...</span>
-              </>
-            ) : (
-              <>
-                <Search className="h-4 w-4" />
-                <span>
-                  {pendingSearchFilters.length > 0 ? 
-                    `Search with ${pendingSearchFilters.length} filter${pendingSearchFilters.length > 1 ? 's' : ''}` : 
-                    'Search'}
-                </span>
-              </>
-            )}
+            Select Columns
+          </button>
+          
+          <button 
+            onClick={openExportModal}
+            className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-xs text-white border border-[#404040] rounded-md"
+          >
+            Export
+          </button>
+          
+          <button 
+            onClick={openFilterModal}
+            className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-xs text-white border border-[#404040] rounded-md"
+          >
+            Filters
           </button>
         </div>
       </div>
-      
-      <div className="flex flex-1 h-[calc(100vh-58px)]">
-        {/* Left sidebar: Filters */}
-        <motion.div 
-          initial={{ x: -50, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ delay: 0.1, duration: 0.3 }}
-          className="w-96 border-r border-[#404040] overflow-y-auto thin-scrollbar bg-[#1f1f1f]"
-        >
-          <div className="p-4">
-            <h2 className="text-lg font-medium text-white mb-4">Filters</h2>
-            
-            {/* Filter lines */}
-            <div className="space-y-6">
-              {pendingSearchFilters.map((filter, idx) => (
-                <div key={idx} className="space-y-3 pb-6 border-b border-[#303030]">
-                  {/* Filter header with subop (WHERE/AND/OR) */}
-                  <div className="flex items-center justify-between">
-                    {idx > 0 ? (
-                      <Combobox
-                        as="div"
-                        value={filter.subop}
-                        onChange={(val) => updateFilterLine(idx, 'subop', val)}
-                        className="w-24"
-                      >
-                        <div className="relative">
-                          <Combobox.Button className="w-full flex items-center justify-between bg-[#252525] border border-[#3a3a3a] rounded px-2 py-1 text-sm text-white">
-                            <span>{filter.subop}</span>
-                            <ChevronUpDownIcon className="h-4 w-4 text-neutral-400" />
-                          </Combobox.Button>
-                          <Combobox.Options className="absolute z-10 mt-1 w-full bg-[#252525] border border-[#3a3a3a] rounded-md shadow-lg max-h-48 overflow-auto">
-                            {subops.map((subop) => (
-                              <Combobox.Option
-                                key={subop}
-                                value={subop}
-                                className={({ active }) =>
-                                  `cursor-pointer select-none relative py-2 px-3 text-sm ${
-                                    active ? "bg-[#303030] text-white" : "text-neutral-300"
-                                  }`
-                                }
-                              >
-                                {subop}
-                              </Combobox.Option>
-                            ))}
-                          </Combobox.Options>
-                        </div>
-                      </Combobox>
-                    ) : (
-                      <div className="w-24 px-2 py-1 text-sm font-medium text-white">WHERE</div>
-                    )}
-                    
-                    <button
-                      onClick={() => removeFilterLine(idx)}
-                      className="h-7 w-7 flex items-center justify-center rounded-full text-neutral-400 hover:text-white hover:bg-[#303030] transition-colors"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                  
-                  {/* Column selector */}
-                  <div className="space-y-1">
-                    <label className="text-xs text-neutral-400">Column</label>
-                    <Combobox
-                      as="div"
-                      value={filter.column}
-                      onChange={(val) => updateFilterLine(idx, 'column', val)}
-                    >
-                      <div className="relative">
-                        <div className="flex items-center bg-[#252525] border border-[#3a3a3a] rounded overflow-hidden">
-                          <Combobox.Input
-                            className="w-full bg-transparent px-3 py-2 text-sm focus:outline-none text-white"
-                            placeholder="Select column"
-                            onChange={(e) => setColumnSearch(e.target.value)}
-                            displayValue={(column) => column}
-                          />
-                          <Combobox.Button className="pr-2">
-                            <ChevronUpDownIcon className="h-5 w-5 text-neutral-400" />
-                          </Combobox.Button>
-                        </div>
-                        <Combobox.Options className="absolute z-10 mt-1 w-full bg-[#252525] border border-[#3a3a3a] rounded-md shadow-lg max-h-48 overflow-auto">
-                          {columns
-                            .filter((col) => col.toLowerCase().includes(columnSearch.toLowerCase()))
-                            .map((column) => (
-                              <Combobox.Option
-                                key={column}
-                                value={column}
-                                className={({ active }) =>
-                                  `cursor-pointer select-none relative py-2 px-3 text-sm ${
-                                    active ? "bg-[#303030] text-white" : "text-neutral-300"
-                                  }`
-                                }
-                              >
-                                {column}
-                              </Combobox.Option>
-                            ))}
-                        </Combobox.Options>
-                      </div>
-                    </Combobox>
-                  </div>
-                  
-                  {/* Condition selector */}
-                  <div className="space-y-1">
-                    <label className="text-xs text-neutral-400">Condition</label>
-                    <Combobox
-                      as="div"
-                      value={filter.condition}
-                      onChange={(val) => updateFilterLine(idx, 'condition', val)}
-                    >
-                      <div className="relative">
-                        <Combobox.Button className="w-full flex items-center justify-between bg-[#252525] border border-[#3a3a3a] rounded px-3 py-2 text-sm text-white">
-                          <span>{filter.condition}</span>
-                          <ChevronUpDownIcon className="h-5 w-5 text-neutral-400" />
-                        </Combobox.Button>
-                        <Combobox.Options className="absolute z-10 mt-1 w-full bg-[#252525] border border-[#3a3a3a] rounded-md shadow-lg max-h-48 overflow-auto">
-                          {conditions.map((condition) => (
-                            <Combobox.Option
-                              key={condition}
-                              value={condition}
-                              className={({ active }) =>
-                                `cursor-pointer select-none relative py-2 px-3 text-sm ${
-                                  active ? "bg-[#303030] text-white" : "text-neutral-300"
-                                }`
-                              }
-                            >
-                              {condition}
-                            </Combobox.Option>
-                          ))}
-                        </Combobox.Options>
-                      </div>
-                    </Combobox>
-                  </div>
-                  
-                  {/* Value input (only shown for conditions that need values) */}
-                  {filter.condition !== "is empty" && filter.condition !== "is not empty" && (
-                    <div className="space-y-1">
-                      <label className="text-xs text-neutral-400">Values</label>
-                      <TokensInput
-                        tokens={filter.tokens}
-                        setTokens={(tokens) => updateFilterTokens(idx, tokens)}
-                        pendingText={filter.pendingText}
-                        setPendingText={(text) => updateFilterPendingText(idx, text)}
-                        column={filter.column}
+
+      {/* Active Filter Badges */}
+      {filters.length > 0 && (
+        <div className="mt-2 px-4 flex flex-wrap gap-2">
+          {filters.map((f, i) => {
+            const prefix = i === 0 ? "Where" : f.subop || "AND";
+            const safeTokens = Array.isArray(f.tokens) ? f.tokens : [];
+            let desc = "";
+            if (f.condition === "is empty" || f.condition === "is not empty") {
+              desc = f.condition;
+            } else {
+              desc = `${f.condition} [${safeTokens.join(", ")}]`;
+            }
+            return (
+              <div key={i} className="bg-blue-600/10 border border-blue-500/20 text-blue-500 text-xs px-2 py-1 rounded-md">
+                <span>
+                  <strong>{prefix}</strong> {f.column} {desc}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Loading state for user settings */}
+      {!userSettingsLoaded && (
+        <div className="mt-6 px-4 text-sm text-neutral-400">Loading user settings...</div>
+      )}
+
+      {/* Table */}
+      {userSettingsLoaded && (
+        <div className="mt-4 px-4 overflow-x-auto w-full">
+          <table className="min-w-full border-collapse">
+            <thead>
+              <tr className="border-b border-[#333333]">
+                {visibleColumns.map((col) => (
+                  <th
+                    key={col}
+                    className="relative group py-2 px-4 text-sm font-medium text-neutral-300 text-left"
+                    style={{
+                      width: columnWidths[col] || "auto",
+                      minWidth: "150px",
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span>{col}</span>
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#404040] opacity-0 group-hover:opacity-100"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          const startX = e.pageX;
+                          const startWidth =
+                            e.currentTarget.parentElement.offsetWidth;
+                          const onMouseMove = (moveEvt) => {
+                            const newWidth =
+                              startWidth + (moveEvt.pageX - startX);
+                            if (newWidth > 100) {
+                              setColumnWidths((prev) => ({
+                                ...prev,
+                                [col]: `${newWidth}px`,
+                              }));
+                            }
+                          };
+                          const onMouseUp = () => {
+                            document.removeEventListener(
+                              "mousemove",
+                              onMouseMove
+                            );
+                            document.removeEventListener(
+                              "mouseup",
+                              onMouseUp
+                            );
+                          };
+                          document.addEventListener("mousemove", onMouseMove);
+                          document.addEventListener("mouseup", onMouseUp);
+                        }}
                       />
                     </div>
-                  )}
-                </div>
-              ))}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rowsLoading
+                ? Array.from({ length: limit }).map((_, i) => (
+                    <tr key={i} className="animate-pulse border-b border-[#333333]">
+                      {visibleColumns.map((c) => (
+                        <td key={c} className="py-2 px-4">
+                          <div className="h-4 bg-[#303030] rounded w-full" />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                : results.map((row, i) => (
+                    <tr key={i} className="border-b border-[#333333] hover:bg-[#252525]">
+                      {visibleColumns.map((c) => (
+                        <td
+                          key={c}
+                          className="py-2 px-4 text-sm text-white whitespace-nowrap"
+                        >
+                          {row[c]}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {userSettingsLoaded && (
+        <div className="mt-4 px-4 flex items-center justify-between">
+          {filters.length > 0 && (
+            <span className="text-xs text-neutral-400">
+              Page {page + 1} of {totalPages}
+            </span>
+          )}
+          <div className="flex gap-2 ml-auto">
+            <button 
+              onClick={prevPage} 
+              disabled={page === 0}
+              className={`px-3 py-1.5 text-xs rounded-md border ${page === 0 ? 'bg-[#252525] text-neutral-500 border-[#333333] cursor-not-allowed' : 'bg-[#252525] hover:bg-[#303030] text-white border-[#404040]'}`}
+            >
+              Previous
+            </button>
+            <button 
+              onClick={nextPage} 
+              disabled={
+                page >=
+                Math.min(
+                  totalPages - 1,
+                  tokensTotal !== null && tokensTotal <= 201 ? 4 : 24
+                )
+              }
+              className={`px-3 py-1.5 text-xs rounded-md border ${
+                page >=
+                Math.min(
+                  totalPages - 1,
+                  tokensTotal !== null && tokensTotal <= 201 ? 4 : 24
+                )
+                  ? 'bg-[#252525] text-neutral-500 border-[#333333] cursor-not-allowed'
+                  : 'bg-[#252525] hover:bg-[#303030] text-white border-[#404040]'
+              }`}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Column Selector Modal */}
+      {showColumnSelectorModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-[#252525] border border-[#404040] rounded-lg w-full max-w-md">
+            <div className="px-4 py-3 border-b border-[#404040] flex items-center justify-between">
+              <h3 className="font-medium">Select Columns</h3>
+              <button onClick={closeColumnSelectorModal} className="text-neutral-400 hover:text-white">
+                ×
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="mb-4">
+                <input
+                  type="text"
+                  placeholder="Search columns..."
+                  value={columnSearch}
+                  onChange={(e) => setColumnSearch(e.target.value)}
+                  className="w-full bg-[#212121] border border-[#404040] rounded-md px-3 py-2 text-white placeholder:text-neutral-600 focus:outline-none focus:border-green-500"
+                />
+              </div>
               
-              {/* Add filter button */}
-              <button
-                onClick={addFilterLine}
-                className="w-full flex items-center justify-center gap-2 py-2 rounded-md bg-[#252525] hover:bg-[#303030] text-sm text-neutral-300 transition-colors"
+              <div className="max-h-80 overflow-y-auto space-y-2">
+                {filteredAvailableColumns.map((col) => (
+                  <label key={col} className="flex items-center gap-2 cursor-pointer py-1">
+                    <input
+                      type="checkbox"
+                      checked={visibleColumns.includes(col)}
+                      onChange={() => toggleColumn(col)}
+                      className="h-4 w-4 accent-green-500"
+                    />
+                    <span className="text-sm text-white">{col}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="px-4 py-3 border-t border-[#404040] flex justify-end">
+              <button 
+                onClick={closeColumnSelectorModal}
+                className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-black font-medium text-xs rounded-md"
               >
-                <PlusCircle className="h-4 w-4" />
-                <span>Add Filter</span>
+                Close
               </button>
             </div>
           </div>
-        </motion.div>
-        
-        {/* Right side: Results */}
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2, duration: 0.3 }}
-          className="flex-1 overflow-hidden flex flex-col"
-        >
-          {/* Active filters display */}
-          {searchFilters.length > 0 && (
-            <div className="px-4 py-3 border-b border-[#404040] flex flex-wrap items-center gap-2">
-              <div className="flex flex-wrap gap-2 flex-1">
-                {searchFilters.map((f, i) => {
-                  const prefix = i === 0 ? "Where" : f.subop;
-                  const safeTokens = Array.isArray(f.tokens) ? f.tokens : [];
-                  let desc = "";
-                  if (f.condition === "is empty" || f.condition === "is not empty") {
-                    desc = f.condition;
-                  } else {
-                    desc = `${f.condition} [${safeTokens.join(", ")}]`;
-                  }
-                  return (
-                    <div key={i} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-600/20 text-xs text-blue-400 border border-blue-700/30">
-                      <strong>{prefix}</strong> {f.column} {desc}
+        </div>
+      )}
+
+      {/* Filter Modal */}
+      {showFilterModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-[#252525] border border-[#404040] rounded-lg w-full max-w-5xl">
+            <div className="px-4 py-3 border-b border-[#404040] flex items-center justify-between">
+              <h3 className="font-medium">Filter</h3>
+              <button onClick={closeFilterModal} className="text-neutral-400 hover:text-white">
+                ×
+              </button>
+            </div>
+            <div className="p-4 max-h-[80vh] overflow-y-auto">
+              <div className="space-y-4">
+                {pendingFilters.map((rule, index) => (
+                  <div
+                    key={index}
+                    className="bg-[#212121] border border-[#404040] p-4 rounded-md"
+                  >
+                    <div className="flex flex-wrap items-end gap-3 mb-3">
+                      {index > 0 && (
+                        <div>
+                          <div className="text-xs text-neutral-400 mb-1">&nbsp;</div>
+                          <select
+                            value={rule.subop}
+                            onChange={(e) => updateLineSubop(index, e.target.value)}
+                            className="bg-[#303030] border border-[#404040] rounded-md py-1.5 px-2 text-sm text-white"
+                          >
+                            <option value="AND">AND</option>
+                            <option value="OR">OR</option>
+                          </select>
+                        </div>
+                      )}
+                      
+                      <div>
+                        <div className="text-xs text-neutral-400 mb-1">Column</div>
+                        <Combobox
+                          value={rule.column}
+                          onChange={(val) => updateFilterLine(index, "column", val)}
+                        >
+                          <div className="relative w-48">
+                            <Combobox.Button
+                              className="relative w-full border border-[#404040] bg-[#303030] text-white text-left rounded-md py-1.5 px-3 text-sm"
+                            >
+                              <Combobox.Input
+                                onChange={(e) => {
+                                  setSearchQuery(e.target.value);
+                                  updateFilterLine(index, "column", e.target.value);
+                                }}
+                                displayValue={(val) => val}
+                                placeholder="Select column..."
+                                className="w-full bg-transparent focus:outline-none"
+                              />
+                              <span className="absolute inset-y-0 right-0 flex items-center pr-2">
+                                <ChevronUpDownIcon
+                                  className="h-5 w-5 text-neutral-400"
+                                  aria-hidden="true"
+                                />
+                              </span>
+                            </Combobox.Button>
+                            <Combobox.Options
+                              className="absolute z-10 mt-1 w-full bg-[#303030] border border-[#404040] rounded-md max-h-60 overflow-auto"
+                            >
+                              {(!searchQuery
+                                ? availableColumns
+                                : availableColumns.filter((c) =>
+                                    c
+                                      .toLowerCase()
+                                      .includes(searchQuery.toLowerCase())
+                                  )
+                              ).map((c) => (
+                                <Combobox.Option
+                                  key={c}
+                                  value={c}
+                                  className={({ active }) =>
+                                    `cursor-pointer select-none px-3 py-2 text-sm ${
+                                      active
+                                        ? "bg-green-500/20 text-green-500"
+                                        : "text-white"
+                                    }`
+                                  }
+                                >
+                                  {c}
+                                </Combobox.Option>
+                              ))}
+                            </Combobox.Options>
+                          </div>
+                        </Combobox>
+                      </div>
+                      
+                      <div>
+                        <div className="text-xs text-neutral-400 mb-1">Condition</div>
+                        <select
+                          value={rule.condition}
+                          onChange={(e) =>
+                            updateFilterLine(index, "condition", e.target.value)
+                          }
+                          className="bg-[#303030] border border-[#404040] rounded-md py-1.5 px-2 text-sm text-white"
+                        >
+                          <option value="contains">Contains</option>
+                          <option value="equals">Equals</option>
+                          <option value="is empty">Is Empty</option>
+                          <option value="is not empty">Is Not Empty</option>
+                        </select>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-              <div className="text-sm text-green-400 font-medium flex items-center gap-1">
-                <span className="flex items-center gap-1">
-                  <CheckCircle className="h-3.5 w-3.5" />
-                  <span>{formatNumber(totalResults)}</span>
-                </span>
-                <span className="text-xs text-neutral-400">matching contacts</span>
-              </div>
-            </div>
-          )}
-          
-          {/* No filters but have results - Show count indicator */}
-          {searchFilters.length === 0 && searchResults.length > 0 && (
-            <div className="px-4 py-3 border-b border-[#404040] flex justify-between items-center">
-              <div className="text-sm text-neutral-400">
-                Showing all contacts
-              </div>
-              <div className="text-sm text-green-400 font-medium flex items-center gap-1">
-                <span className="flex items-center gap-1">
-                  <CheckCircle className="h-3.5 w-3.5" />
-                  <span>{formatNumber(totalResults)}</span>
-                </span>
-                <span className="text-xs text-neutral-400">found</span>
-              </div>
-            </div>
-          )}
-          
-          {/* Results table container with custom scrollbar */}
-          <div className="flex-1 overflow-auto table-scrollbar">
-            {resultsLoading ? (
-              <div className="flex items-center justify-center h-full text-neutral-400">
-                <div className="flex flex-col items-center gap-4">
-                  <div className="animate-spin">
-                    <Search className="h-8 w-8" />
+                    
+                    {(rule.condition === "contains" || rule.condition === "equals") && (
+                      <div className="mb-3">
+                        <div className="text-xs text-neutral-400 mb-1">Search (Enter to add new)</div>
+                        <TokensInput
+                          tokens={rule.tokens}
+                          setTokens={(arr) => updateLineTokens(index, arr)}
+                          pendingText={rule.pendingText || ""}
+                          setPendingText={(txt) => updateLinePendingText(index, txt)}
+                          tableName={selectedTable.id}
+                          column={rule.column}
+                        />
+                      </div>
+                    )}
+                    
+                    <div>
+                      <button 
+                        onClick={() => removeFilterLine(index)}
+                        className="px-3 py-1.5 bg-[#303030] hover:bg-[#404040] text-white text-xs rounded-md border border-[#404040]"
+                      >
+                        Remove Rule
+                      </button>
+                    </div>
                   </div>
-                  <p>Searching...</p>
-                </div>
-              </div>
-            ) : searchResults.length > 0 ? (
-              <table className="w-full border-collapse">
-                <thead className="bg-[#1a1a1a] sticky top-0">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider whitespace-nowrap">Full name</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider whitespace-nowrap">Job title</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider whitespace-nowrap">Company</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider whitespace-nowrap">Emails</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-neutral-400 uppercase tracking-wider whitespace-nowrap">Phone numbers</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#303030]">
-                  {searchResults.map((result, idx) => (
-                    <tr key={idx} className="hover:bg-[#1d1d1d] transition-colors">
-                      <td className="px-4 py-3 text-sm text-neutral-300">{result["Full name"] || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-neutral-300">{result["Job title"] || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-neutral-300">{result["Company"] || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-neutral-300">{result["Emails"] || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-neutral-300">{result["Phone numbers"] || "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className="flex items-center justify-center h-full text-neutral-400">
-                <div className="flex flex-col items-center gap-4">
-                  <ListFilter className="h-10 w-10 text-neutral-500" />
-                  <p>Use the filters on the left to search for contacts</p>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* Pagination */}
-          {searchResults.length > 0 && (
-            <div className="px-4 py-3 border-t border-[#404040] flex justify-between items-center bg-[#1a1a1a]">
-              <div className="text-xs text-neutral-500">
-                Showing {searchPage * searchLimit + 1} to {Math.min((searchPage + 1) * searchLimit, totalResults)} of {formatNumber(totalResults)}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => fetchSearchResults(Math.max(0, searchPage - 1))}
-                  disabled={searchPage === 0}
-                  className="px-2 py-1 rounded text-xs text-neutral-400 hover:bg-[#303030] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                ))}
+                
+                <button 
+                  onClick={addFilterLine}
+                  className="px-3 py-1.5 bg-transparent hover:bg-[#303030] text-white text-xs rounded-md border border-[#404040] flex items-center gap-1"
                 >
-                  Previous
-                </button>
-                <button
-                  onClick={() => fetchSearchResults(searchPage + 1)}
-                  disabled={searchPage >= totalPages - 1}
-                  className="px-2 py-1 rounded text-xs text-neutral-400 hover:bg-[#303030] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next
+                  <span>+</span> Add Rule
                 </button>
               </div>
             </div>
-          )}
-        </motion.div>
-      </div>
-    </motion.div>
+            <div className="px-4 py-3 border-t border-[#404040] flex justify-end gap-2">
+              <button 
+                onClick={closeFilterModal}
+                className="px-3 py-1.5 bg-[#303030] hover:bg-[#404040] text-white text-xs rounded-md border border-[#404040]"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={applyFilters}
+                className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-black font-medium text-xs rounded-md"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-[#252525] border border-[#404040] rounded-lg w-full max-w-md">
+            <div className="px-4 py-3 border-b border-[#404040] flex items-center justify-between">
+              <h3 className="font-medium">Export</h3>
+              <button onClick={closeExportModal} className="text-neutral-400 hover:text-white">
+                ×
+              </button>
+            </div>
+            <div className="p-4">
+              {exporting ? (
+                <div>
+                  <div className="w-full bg-[#303030] h-2 rounded-full mb-2 overflow-hidden">
+                    <div
+                      className="h-full bg-green-500 rounded-full"
+                      style={{ width: `${exportProgress}%` }}
+                    />
+                  </div>
+                  <div className="text-sm text-neutral-400 text-center">
+                    {exportProgress}%
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-neutral-400 mb-4">
+                    Choose how many rows to export. You'll be charged 1 token per
+                    row, but only if the export completes successfully.
+                  </p>
+                  
+                  <div className="mb-4">
+                    <div className="text-xs text-neutral-400 mb-1">Rows to Export</div>
+                    <input
+                      type="number"
+                      value={rowsToExport === null ? "" : rowsToExport}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setRowsToExport(val === "" ? null : Number(val));
+                      }}
+                      min="1"
+                      className="w-full bg-[#212121] border border-[#404040] rounded-md px-3 py-2 text-white placeholder:text-neutral-600 focus:outline-none focus:border-green-500"
+                    />
+                  </div>
+                  
+                  {exportError && (
+                    <div className="text-red-500 text-sm mb-2">{exportError}</div>
+                  )}
+                  
+                  {exportDone && (
+                    <div className="text-green-500 text-sm mb-2">
+                      Export complete! See the Exports page to download your CSV.
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="px-4 py-3 border-t border-[#404040] flex justify-end gap-2">
+              {!exporting && !exportDone && (
+                <>
+                  <button 
+                    onClick={closeExportModal}
+                    className="px-3 py-1.5 bg-[#303030] hover:bg-[#404040] text-white text-xs rounded-md border border-[#404040]"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={startExport}
+                    className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-black font-medium text-xs rounded-md"
+                  >
+                    Start Export
+                  </button>
+                </>
+              )}
+              
+              {!exporting && exportDone && (
+                <button 
+                  onClick={closeExportModal}
+                  className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-black font-medium text-xs rounded-md"
+                >
+                  Close
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
-
-export default ManualSearch; 
