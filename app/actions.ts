@@ -87,6 +87,7 @@ export const signInAction = async (formData: FormData) => {
         avatar_url: "default/default.png",
         stripe_customer_id: stripeCustomerId,
         trial_pending: true,
+        onboarding_completed: false
       });
 
     if (insertError) {

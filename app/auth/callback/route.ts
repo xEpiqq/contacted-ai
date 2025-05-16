@@ -63,6 +63,7 @@ export async function GET(request: NextRequest) {
           avatar_url: "default/default.png",
           stripe_customer_id: stripeCustomerId,
           trial_pending: true, // Mark that a trial checkout is pending for new users
+          onboarding_completed: false // Ensure new users complete onboarding
         })
         .select("*")
         .single();
@@ -107,6 +108,11 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // For recovery flows or if no trial is pending, simply redirect to the protected page.
+  // For recovery flows or if no trial is pending, check onboarding status
+  if (type !== "recovery" && profileData && profileData.onboarding_completed === false) {
+    return NextResponse.redirect(`${origin}/onboarding`);
+  }
+
+  // Otherwise, redirect to the protected page or requested redirect
   return NextResponse.redirect(`${origin}${redirectTo}`);
 }

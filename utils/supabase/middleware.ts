@@ -37,15 +37,34 @@ export const updateSession = async (request: NextRequest) => {
 
     // This will refresh session if expired - required for Server Components
     // https://supabase.com/docs/guides/auth/server-side/nextjs
-    const user = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
 
     // If root or other protected routes and user is not authenticated
     if (
       (request.nextUrl.pathname === "/" || 
        request.nextUrl.pathname.startsWith("/protected")) && 
-      user.error
+      !user
     ) {
       return NextResponse.redirect(new URL("/sign-in", request.url));
+    }
+
+    // Check if the user has completed onboarding
+    if (user && 
+        request.nextUrl.pathname !== "/onboarding" && 
+        !request.nextUrl.pathname.startsWith("/_next") &&
+        !request.nextUrl.pathname.startsWith("/auth") &&
+        !request.nextUrl.pathname.startsWith("/sign-")) {
+      
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("onboarding_completed")
+        .eq("user_id", user.id)
+        .single();
+
+      // Redirect to onboarding if not completed
+      if (profile && profile.onboarding_completed === false) {
+        return NextResponse.redirect(new URL("/onboarding", request.url));
+      }
     }
 
     // If user is already authenticated and tries to access auth pages
@@ -53,7 +72,7 @@ export const updateSession = async (request: NextRequest) => {
       (request.nextUrl.pathname === "/sign-in" || 
        request.nextUrl.pathname === "/sign-up" || 
        request.nextUrl.pathname === "/forgot-password") && 
-      !user.error
+      user
     ) {
       return NextResponse.redirect(new URL("/", request.url));
     }
