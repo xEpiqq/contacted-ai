@@ -86,7 +86,7 @@ function TokensInput({
       fetchSuggestions();
     }
   }
-
+  
   function handleBlur() {
     // Delay a bit so that if the user clicks a suggestion, we won't close immediately
     setTimeout(() => {
@@ -98,7 +98,7 @@ function TokensInput({
       }
     }, 150);
   }
-
+  
   function handleKeyDown(e) {
     if (e.key === "Enter" && pendingText.trim() !== "") {
       e.preventDefault();
@@ -106,7 +106,7 @@ function TokensInput({
       setPendingText("");
     }
   }
-
+  
   function addToken(token) {
     if (token && !tokens.includes(token)) {
       setTokens([...tokens, token]);
@@ -135,16 +135,16 @@ function TokensInput({
       </div>
 
       {/* Input for new token */}
-      <input
+        <input
         type="text"
-        value={pendingText}
-        onChange={(e) => setPendingText(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
+          value={pendingText}
+          onChange={(e) => setPendingText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
         placeholder="Search (Enter to add new)"
         className="w-full bg-[#212121] border border-[#404040] rounded-md px-3 py-2 text-white placeholder:text-neutral-600 focus:outline-none focus:border-green-500"
-      />
+        />
 
       {/* Suggestions dropdown */}
       {showSuggestions && (
@@ -671,14 +671,14 @@ export default function ManualSearch() {
             </span>
           )}
           
-          <button 
+          <button
             onClick={openColumnSelectorModal}
             className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-xs text-white border border-[#404040] rounded-md"
           >
             Select Columns
           </button>
           
-          <button 
+          <button
             onClick={openExportModal}
             className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-xs text-white border border-[#404040] rounded-md"
           >
@@ -711,10 +711,10 @@ export default function ManualSearch() {
                 <span>
                   <strong>{prefix}</strong> {f.column} {desc}
                 </span>
-              </div>
+        </div>
             );
           })}
-        </div>
+      </div>
       )}
 
       {/* Loading state for user settings */}
@@ -800,7 +800,7 @@ export default function ManualSearch() {
                   ))}
             </tbody>
           </table>
-        </div>
+                        </div>
       )}
 
       {/* Pagination */}
@@ -812,7 +812,7 @@ export default function ManualSearch() {
             </span>
           )}
           <div className="flex gap-2 ml-auto">
-            <button 
+                    <button
               onClick={prevPage} 
               disabled={page === 0}
               className={`px-3 py-1.5 text-xs rounded-md border ${page === 0 ? 'bg-[#252525] text-neutral-500 border-[#333333] cursor-not-allowed' : 'bg-[#252525] hover:bg-[#303030] text-white border-[#404040]'}`}
@@ -839,8 +839,8 @@ export default function ManualSearch() {
               }`}
             >
               Next
-            </button>
-          </div>
+                    </button>
+                  </div>
         </div>
       )}
 
@@ -860,10 +860,10 @@ export default function ManualSearch() {
                   type="text"
                   placeholder="Search columns..."
                   value={columnSearch}
-                  onChange={(e) => setColumnSearch(e.target.value)}
+                            onChange={(e) => setColumnSearch(e.target.value)}
                   className="w-full bg-[#212121] border border-[#404040] rounded-md px-3 py-2 text-white placeholder:text-neutral-600 focus:outline-none focus:border-green-500"
-                />
-              </div>
+                          />
+                        </div>
               
               <div className="max-h-80 overflow-y-auto space-y-2">
                 {filteredAvailableColumns.map((col) => (
@@ -877,8 +877,8 @@ export default function ManualSearch() {
                     <span className="text-sm text-white">{col}</span>
                   </label>
                 ))}
-              </div>
-            </div>
+                      </div>
+                  </div>
             <div className="px-4 py-3 border-t border-[#404040] flex justify-end">
               <button 
                 onClick={closeColumnSelectorModal}
@@ -925,7 +925,7 @@ export default function ManualSearch() {
                       
                       <div>
                         <div className="text-xs text-neutral-400 mb-1">Column</div>
-                        <Combobox
+                    <Combobox
                           value={rule.column}
                           onChange={(val) => updateFilterLine(index, "column", val)}
                         >
@@ -948,7 +948,7 @@ export default function ManualSearch() {
                                   aria-hidden="true"
                                 />
                               </span>
-                            </Combobox.Button>
+                        </Combobox.Button>
                             <Combobox.Options
                               className="absolute z-10 mt-1 w-full bg-[#303030] border border-[#404040] rounded-md max-h-60 overflow-auto"
                             >
@@ -960,10 +960,10 @@ export default function ManualSearch() {
                                       .includes(searchQuery.toLowerCase())
                                   )
                               ).map((c) => (
-                                <Combobox.Option
+                            <Combobox.Option
                                   key={c}
                                   value={c}
-                                  className={({ active }) =>
+                              className={({ active }) =>
                                     `cursor-pointer select-none px-3 py-2 text-sm ${
                                       active
                                         ? "bg-green-500/20 text-green-500"
@@ -972,13 +972,13 @@ export default function ManualSearch() {
                                   }
                                 >
                                   {c}
-                                </Combobox.Option>
-                              ))}
-                            </Combobox.Options>
-                          </div>
-                        </Combobox>
+                            </Combobox.Option>
+                          ))}
+                        </Combobox.Options>
                       </div>
-                      
+                    </Combobox>
+                  </div>
+                  
                       <div>
                         <div className="text-xs text-neutral-400 mb-1">Condition</div>
                         <select
@@ -999,16 +999,16 @@ export default function ManualSearch() {
                     {(rule.condition === "contains" || rule.condition === "equals") && (
                       <div className="mb-3">
                         <div className="text-xs text-neutral-400 mb-1">Search (Enter to add new)</div>
-                        <TokensInput
+                      <TokensInput
                           tokens={rule.tokens}
                           setTokens={(arr) => updateLineTokens(index, arr)}
                           pendingText={rule.pendingText || ""}
                           setPendingText={(txt) => updateLinePendingText(index, txt)}
                           tableName={selectedTable.id}
                           column={rule.column}
-                        />
-                      </div>
-                    )}
+                      />
+                    </div>
+                  )}
                     
                     <div>
                       <button 
@@ -1018,17 +1018,17 @@ export default function ManualSearch() {
                         Remove Rule
                       </button>
                     </div>
-                  </div>
-                ))}
-                
-                <button 
-                  onClick={addFilterLine}
+                </div>
+              ))}
+              
+              <button
+                onClick={addFilterLine}
                   className="px-3 py-1.5 bg-transparent hover:bg-[#303030] text-white text-xs rounded-md border border-[#404040] flex items-center gap-1"
-                >
+              >
                   <span>+</span> Add Rule
-                </button>
-              </div>
+              </button>
             </div>
+          </div>
             <div className="px-4 py-3 border-t border-[#404040] flex justify-end gap-2">
               <button 
                 onClick={closeFilterModal}
@@ -1042,11 +1042,11 @@ export default function ManualSearch() {
               >
                 Apply
               </button>
+                    </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
-
+          )}
+          
       {/* Export Modal */}
       {showExportModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -1056,7 +1056,7 @@ export default function ManualSearch() {
               <button onClick={closeExportModal} className="text-neutral-400 hover:text-white">
                 ×
               </button>
-            </div>
+              </div>
             <div className="p-4">
               {exporting ? (
                 <div>
@@ -1065,11 +1065,11 @@ export default function ManualSearch() {
                       className="h-full bg-green-500 rounded-full"
                       style={{ width: `${exportProgress}%` }}
                     />
-                  </div>
+              </div>
                   <div className="text-sm text-neutral-400 text-center">
                     {exportProgress}%
+            </div>
                   </div>
-                </div>
               ) : (
                 <>
                   <p className="text-sm text-neutral-400 mb-4">
@@ -1089,7 +1089,7 @@ export default function ManualSearch() {
                       min="1"
                       className="w-full bg-[#212121] border border-[#404040] rounded-md px-3 py-2 text-white placeholder:text-neutral-600 focus:outline-none focus:border-green-500"
                     />
-                  </div>
+                </div>
                   
                   {exportError && (
                     <div className="text-red-500 text-sm mb-2">{exportError}</div>
@@ -1098,7 +1098,7 @@ export default function ManualSearch() {
                   {exportDone && (
                     <div className="text-green-500 text-sm mb-2">
                       Export complete! See the Exports page to download your CSV.
-                    </div>
+              </div>
                   )}
                 </>
               )}
@@ -1106,18 +1106,18 @@ export default function ManualSearch() {
             <div className="px-4 py-3 border-t border-[#404040] flex justify-end gap-2">
               {!exporting && !exportDone && (
                 <>
-                  <button 
+                <button
                     onClick={closeExportModal}
                     className="px-3 py-1.5 bg-[#303030] hover:bg-[#404040] text-white text-xs rounded-md border border-[#404040]"
-                  >
+                >
                     Cancel
-                  </button>
-                  <button 
+                </button>
+                <button
                     onClick={startExport}
                     className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-black font-medium text-xs rounded-md"
-                  >
+                >
                     Start Export
-                  </button>
+                </button>
                 </>
               )}
               
@@ -1130,9 +1130,9 @@ export default function ManualSearch() {
                 </button>
               )}
             </div>
-          </div>
-        </div>
-      )}
-    </div>
+              </div>
+            </div>
+          )}
+      </div>
   );
 }
