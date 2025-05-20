@@ -21,6 +21,11 @@ function SearchStepOne() {
   const [isLoading, setIsLoading] = useState(false);
   const [apiResults, setApiResults] = useState(null);
   const [apiError, setApiError] = useState(null);
+  const [isVerifyingTitles, setIsVerifyingTitles] = useState(false);
+  const [titleMatches, setTitleMatches] = useState({});
+  const [usedTitles, setUsedTitles] = useState([]);
+  const [processingTime, setProcessingTime] = useState(null);
+  const processStartTimeRef = useRef(null);
 
   const textareaRef = useRef(null);
   const plusButtonRef = useRef(null);
@@ -45,9 +50,16 @@ function SearchStepOne() {
     setIsLoading(true);
     setApiResults(null);
     setApiError(null);
+    setTitleMatches({});
+    setUsedTitles([]);
+    setProcessingTime(null);
+    
+    // Start the timer
+    processStartTimeRef.current = Date.now();
 
     try {
-      const response = await fetch('/api/generate-keywords', {
+      // Step 1: Determine target type
+      const targetTypeResponse = await fetch('/api/ai/classify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -55,20 +67,113 @@ function SearchStepOne() {
         body: JSON.stringify({ description: text }),
       });
 
-      const data = await response.json();
+      const targetTypeData = await targetTypeResponse.json();
 
-      if (!response.ok) {
-        throw new Error(data.error || `Request failed with status ${response.status}`);
+      if (!targetTypeResponse.ok) {
+        throw new Error(targetTypeData.error || `Request failed with status ${targetTypeResponse.status}`);
       }
       
-      setApiResults(data);
-      // setText(""); // Optionally clear text after successful submission
+      // Step 2: Based on target type, call the appropriate extraction endpoint
+      let extractionResponse;
+      if (targetTypeData.targetType === "local_businesses") {
+        extractionResponse = await fetch('/api/ai/business', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ description: text }),
+        });
+      } else {
+        extractionResponse = await fetch('/api/ai/people', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ description: text }),
+        });
+      }
+
+      const extractionData = await extractionResponse.json();
+
+      if (!extractionResponse.ok) {
+        throw new Error(extractionData.error || `Request failed with status ${extractionResponse.status}`);
+      }
+      
+      // Combine the results
+      const combinedResults = {
+        targetType: targetTypeData.targetType,
+        targetTypeConfidence: targetTypeData.targetTypeConfidence,
+        ...extractionData
+      };
+      
+      setApiResults(combinedResults);
+      
+      // Step 3: Verify job titles if they exist
+      if (combinedResults.targetType === "people" && 
+          combinedResults.jobTitles && 
+          combinedResults.jobTitles.length > 0) {
+        await verifyJobTitles(combinedResults.jobTitles);
+      }
     } catch (error) {
       console.error("API call failed:", error);
       setApiError(error.message);
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  const verifyJobTitles = async (jobTitles) => {
+    if (!jobTitles || jobTitles.length === 0) return;
+    
+    setIsVerifyingTitles(true);
+    
+    try {
+      const response = await fetch('/api/ai/verify-titles', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ titles: jobTitles }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Verification failed with status ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Build a map of original title -> matches data
+      const matchesMap = {};
+      data.matches.forEach(match => {
+        matchesMap[match.title] = match;
+      });
+      
+      setTitleMatches(matchesMap);
+      setUsedTitles(data.usedTitles || []);
+    } catch (error) {
+      console.error("Title verification failed:", error);
+    } finally {
+      setIsVerifyingTitles(false);
+      
+      // Calculate and set the processing time
+      if (processStartTimeRef.current) {
+        const endTime = Date.now();
+        const timeInSeconds = ((endTime - processStartTimeRef.current) / 1000).toFixed(2);
+        setProcessingTime(timeInSeconds);
+      }
+    }
+  };
+  
+  // Helper function to format large numbers
+  const formatCount = (count) => {
+    if (count >= 1000000) {
+      return `${(count / 1000000).toFixed(1)}M`;
+    }
+    if (count >= 1000) {
+      return `${(count / 1000).toFixed(1)}k`;
+    }
+    return count;
   };
   
   const handleTextChange = (e) => {
@@ -270,14 +375,108 @@ function SearchStepOne() {
             <>
           {apiResults.jobTitles && apiResults.jobTitles.length > 0 && (
             <div className="mb-3">
-              <h4 className="text-md font-medium text-neutral-300 mb-1.5">Job Titles:</h4>
-              <div className="flex flex-wrap gap-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <h4 className="text-md font-medium text-neutral-300">Job Titles:</h4>
+                    <div className="flex items-center">
+                      {isVerifyingTitles && (
+                        <span className="text-xs text-neutral-500 flex items-center mr-3">
+                          <div className="w-3 h-3 border-t-transparent border border-blue-400 rounded-full animate-spin mr-1"></div>
+                          Finding optimal titles...
+                        </span>
+                      )}
+                      {processingTime && (
+                        <span className="text-xs text-teal-500 bg-teal-900/20 px-2 py-1 rounded flex items-center gap-1">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                          </svg>
+                          Process: {processingTime}s
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
                 {apiResults.jobTitles.map((title, index) => (
-                  <span key={index} className="px-3 py-1 bg-blue-600/20 border border-blue-500/30 text-blue-300 text-xs rounded-full">
+                    <div key={index} className="mb-4 pb-3 border-b border-neutral-700 last:border-b-0">
+                      {/* AI-generated title */}
+                      <div className="flex flex-wrap gap-2 mb-1.5">
+                        <span 
+                          className={`px-3 py-1 text-xs rounded-full flex items-center gap-1 ${
+                            titleMatches[title]?.winner?.isControl 
+                              ? "bg-red-600/20 border border-red-500/30 text-red-300" 
+                              : "bg-blue-600/20 border border-blue-500/30 text-blue-300"
+                          }`}
+                        >
                     {title}
+                          {titleMatches[title]?.winner?.isControl && (
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" 
+                                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                          {titleMatches[title]?.winner?.count > 0 && (
+                            <span className="text-[9px] font-medium bg-black/30 px-1.5 py-0.5 rounded">
+                              {formatCount(titleMatches[title]?.winner?.count)}
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-xs text-neutral-500 self-center">AI suggestion</span>
+                      </div>
+                      
+                      {/* Database matches */}
+                      {titleMatches[title] && (
+                        <div className="ml-4 flex flex-col gap-1">
+                          {/* Winner (if not the control) */}
+                          {titleMatches[title].winner && !titleMatches[title].winner.isControl && (
+                            <div className="mb-1">
+                              <span className="text-xs text-neutral-400 mb-1">Selected match:</span>
+                              <div className="flex flex-wrap gap-2 mt-1">
+                                <span 
+                                  className="px-3 py-1 bg-red-600/20 border border-red-500/30 text-red-300 text-xs rounded-full flex items-center gap-1"
+                                  title={`${titleMatches[title].winner.count} profiles with this title`}
+                                >
+                                  {titleMatches[title].winner.title}
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" 
+                                          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                  <span className="text-red-400/80 text-[9px] font-medium bg-red-900/30 px-1.5 py-0.5 rounded">
+                                    {formatCount(titleMatches[title].winner.count)}
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Alternates */}
+                          {titleMatches[title].alternates && titleMatches[title].alternates.length > 0 && (
+                            <div>
+                              <span className="text-xs text-neutral-400 mb-1">Other matches:</span>
+                              <div className="flex flex-wrap gap-2 mt-1">
+                                {titleMatches[title].alternates.slice(0, 3).map((match, matchIndex) => (
+                                  <span 
+                                    key={matchIndex} 
+                                    className="px-3 py-1 bg-neutral-600/20 border border-neutral-500/30 text-neutral-300 text-xs rounded-full flex items-center gap-1"
+                                    title={`${match.count} profiles with this title`}
+                                  >
+                                    {match.title}
+                                    <span className="text-neutral-400/80 text-[9px] font-medium bg-neutral-900/30 px-1.5 py-0.5 rounded">
+                                      {formatCount(match.count)}
+                                    </span>
                   </span>
                 ))}
               </div>
+                            </div>
+                          )}
+                          
+                          {/* No matches case */}
+                          {!titleMatches[title].winner && !titleMatches[title].alternates && (
+                            <span className="text-xs text-neutral-500">No similar titles found in database</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
             </div>
           )}
           {apiResults.industryKeywords && apiResults.industryKeywords.length > 0 && (
