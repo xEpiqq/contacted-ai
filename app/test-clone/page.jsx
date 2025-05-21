@@ -2106,6 +2106,13 @@ export default function TestClonePage() {
                 To reduce failrate you can have AI literally perform a counting operation based on the filters it currently has and then see how many it generates and then try again or have it try 3x sets of queries in parrallel to get the best results.
               </p>
             </div>
+            
+            <div className="bg-purple-500/10 border border-purple-500/20 rounded-md p-3">
+              <p className="text-sm text-purple-300 font-medium mb-2">API Architecture</p>
+              <p className="text-xs text-neutral-300">
+                Split up the giga test-clone API route so that the flow is more clear.
+              </p>
+            </div>
           </div>
         }
         position="left"
