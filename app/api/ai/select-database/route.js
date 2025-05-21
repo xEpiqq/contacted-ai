@@ -163,7 +163,8 @@ export async function POST(request) {
           requiresFollowUp: true,
           message: jsonResponse.message,
           options: jsonResponse.options,
-          processingTime
+          processingTime,
+          stage: "database-selection"
         });
       }
     } catch (e) {
@@ -171,15 +172,66 @@ export async function POST(request) {
     }
     
     // If not JSON or not a valid follow-up structure, treat as a simple database name
-    return NextResponse.json({
-      databaseName: content,
-      processingTime
-    });
+    const databaseName = content.toLowerCase().trim();
+    
+    // Now we need to forward the query to the appropriate database API route
+    const forwardQuery = async (dbRoute) => {
+      try {
+        // Make an internal API call to the appropriate database route
+        const apiUrl = new URL(`/api/ai/${dbRoute}`, request.url).toString();
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ userQuery }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Database API responded with status: ${response.status}`);
+        }
+        
+        const dbResponse = await response.json();
+        
+        // Return combined results
+        return NextResponse.json({
+          databaseName,
+          dbResponse,
+          processingTime,
+          stage: "query-processing"
+        });
+      } catch (error) {
+        console.error(`Error forwarding to ${dbRoute} API:`, error);
+        return NextResponse.json(
+          { error: `Failed to process query in ${dbRoute} database`, details: error.message },
+          { status: 500 }
+        );
+      }
+    };
+    
+    // Route to the appropriate database API based on the database name
+    switch(databaseName) {
+      case "usa4_new_v2":
+        return forwardQuery("usa4");
+      case "otc1_new_v2":
+        return forwardQuery("otc1");
+      case "eap1_new_v2":
+        return forwardQuery("eap1");
+      case "deez_3_v3":
+        return forwardQuery("deez");
+      default:
+        // If the database name doesn't match any of our routes
+        return NextResponse.json({
+          databaseName,
+          error: "Unknown database selected",
+          processingTime
+        });
+    }
   } catch (error) {
     console.error('Error in database selection:', error);
     
     return NextResponse.json(
-      { error: 'Failed to process the query' },
+      { error: 'Failed to process the query', details: error.message },
       { status: 500 }
     );
   }

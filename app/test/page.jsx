@@ -12,6 +12,7 @@ import {
   Chrome, 
   Gem
 } from "lucide-react";
+import NavMenu from '@/app/components/NavMenu';
 
 function SearchStepOne() {
   const [text, setText] = useState("");
@@ -213,6 +214,8 @@ function SearchStepOne() {
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
       className="w-full max-w-[690px] text-white"
     >
+      <NavMenu />
+      
       <div className="flex flex-col items-center gap-2 mb-4">
         <p className="text-neutral-400 text-sm text-center">
           AI-Powered Audience Targeting

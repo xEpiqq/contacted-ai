@@ -23,7 +23,8 @@ export function buildESQueryFromFilters(filters = []) {
   }
 
   const mustClauses = [];
-  let currentShouldGroup = []; // only relevant if you fully implement OR logic
+  const shouldClauses = [];
+  let currentShouldGroup = []; // Collects sequences of OR filters
 
   filters.forEach((f, index) => {
     const isFirst = index === 0;
@@ -35,24 +36,73 @@ export function buildESQueryFromFilters(filters = []) {
 
     // 2) Combine subQuery in the final bool
     if (isFirst || subop === "AND") {
-      // Add subQuery to must
+      // If we have a pending OR group, resolve it first
+      if (currentShouldGroup.length > 0) {
+        if (currentShouldGroup.length === 1) {
+          // Just one item in the OR group, add it directly
+          shouldClauses.push(currentShouldGroup[0]);
+        } else {
+          // Multiple items in OR group, wrap in a bool should
+          shouldClauses.push({
+            bool: {
+              should: currentShouldGroup,
+              minimum_should_match: 1
+            }
+          });
+        }
+        // Reset the OR group
+        currentShouldGroup = [];
+      }
+      
+      // Add the current filter to the must clauses
       mustClauses.push(subQuery);
     } else if (subop === "OR") {
-      // If you want advanced logic, accumulate in currentShouldGroup
+      // This is part of an OR group with the previous filter
+      
+      // If this is the first OR after a sequence of ANDs
+      if (currentShouldGroup.length === 0 && mustClauses.length > 0) {
+        // Move the last must clause to the should group
+        currentShouldGroup.push(mustClauses.pop());
+      }
+      
+      // Add this filter to the OR group
       currentShouldGroup.push(subQuery);
-      // Then flush that group if the next line is "AND" or if it's the last line
-      // Not fully shown here for brevity
+      
+      // If this is the last filter, flush the OR group
+      if (index === filters.length - 1) {
+        if (currentShouldGroup.length === 1) {
+          // Just one item, add directly to should
+          shouldClauses.push(currentShouldGroup[0]);
+        } else {
+          // Multiple items, wrap in a bool should
+          shouldClauses.push({
+            bool: {
+              should: currentShouldGroup,
+              minimum_should_match: 1
+            }
+          });
+        }
+      }
     }
   });
 
-  // If leftover OR group, incorporate it. (Omitted in minimal example)
-
   // Final top-level bool
-  return {
-    bool: {
-      must: mustClauses,
-    },
+  const boolQuery = {
+    bool: {}
   };
+  
+  // Add must clauses if they exist
+  if (mustClauses.length > 0) {
+    boolQuery.bool.must = mustClauses;
+  }
+  
+  // Add should clauses if they exist
+  if (shouldClauses.length > 0) {
+    boolQuery.bool.should = shouldClauses;
+    boolQuery.bool.minimum_should_match = 1;
+  }
+  
+  return boolQuery;
 }
 
 /**

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowUpIcon } from '@heroicons/react/24/outline';
+import NavMenu from '@/app/components/NavMenu';
 
 export default function DatabaseSelectorTest() {
   const [query, setQuery] = useState('');
@@ -206,6 +207,8 @@ export default function DatabaseSelectorTest() {
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className="w-full max-w-[690px] text-white"
       >
+        <NavMenu />
+        
         <div className="flex flex-col items-center gap-2 mb-4">
           <p className="text-neutral-400 text-sm text-center">
             AI-Powered Database Selector
@@ -361,6 +364,47 @@ export default function DatabaseSelectorTest() {
                 </span>
               </div>
             </div>
+            
+            {/* Display Generated Query Parameters */}
+            {result.dbResponse && result.dbResponse.queryParams && (
+              <div className="mb-6 p-4 border border-neutral-700 rounded-md">
+                <h4 className="text-md font-medium text-neutral-300 mb-3">Generated Query Parameters:</h4>
+                <div className="bg-[#232323] p-3 rounded-md overflow-auto max-h-[300px]">
+                  {result.dbResponse.queryParams.fields ? (
+                    <div className="space-y-2">
+                      {result.dbResponse.queryParams.fields.map((field, index) => (
+                        <div key={index} className="text-sm border border-neutral-700 rounded-md p-2 bg-[#1e1e1e]">
+                          <div className="flex items-center gap-2">
+                            <span className="text-blue-300 font-mono">Field:</span>
+                            <span className="text-white font-mono">{field.field}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-purple-300 font-mono">Operation:</span>
+                            <span className="text-white font-mono">{field.operation}</span>
+                          </div>
+                          {field.value && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-green-300 font-mono">Value:</span>
+                              <span className="text-white font-mono">{field.value}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <pre className="text-xs text-neutral-300 whitespace-pre-wrap">
+                      {JSON.stringify(result.dbResponse.queryParams, null, 2)}
+                    </pre>
+                  )}
+                </div>
+                <div className="mt-2 text-xs text-neutral-500 flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 mr-1">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                  </svg>
+                  These parameters would be sent to Elasticsearch to retrieve matching records.
+                </div>
+              </div>
+            )}
             
             <div className="mb-2">
               <h4 className="text-md font-medium text-neutral-300 mb-3">Available Databases:</h4>
