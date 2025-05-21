@@ -2093,6 +2093,13 @@ export default function TestClonePage() {
         title="To-do"
         primaryContent={
           <div className="space-y-4">
+            <div className="bg-red-500/10 border border-red-500/20 rounded-md p-3">
+              <p className="text-sm text-red-300 font-medium mb-2">Architecture Priority</p>
+              <p className="text-xs text-neutral-300">
+                Split up mega API route up into pieces and introduce flows for all databases.
+              </p>
+            </div>
+            
             <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-md p-3">
               <p className="text-sm text-yellow-300 font-medium mb-2">Follow-up Flow</p>
               <p className="text-xs text-neutral-300">
@@ -2104,13 +2111,6 @@ export default function TestClonePage() {
               <p className="text-sm text-blue-300 font-medium mb-2">Reduce Failure Rate</p>
               <p className="text-xs text-neutral-300">
                 To reduce failrate you can have AI literally perform a counting operation based on the filters it currently has and then see how many it generates and then try again or have it try 3x sets of queries in parrallel to get the best results.
-              </p>
-            </div>
-            
-            <div className="bg-purple-500/10 border border-purple-500/20 rounded-md p-3">
-              <p className="text-sm text-purple-300 font-medium mb-2">API Architecture</p>
-              <p className="text-xs text-neutral-300">
-                Split up the giga test-clone API route so that the flow is more clear.
               </p>
             </div>
             
