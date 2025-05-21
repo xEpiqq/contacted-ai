@@ -2113,6 +2113,13 @@ export default function TestClonePage() {
                 Split up the giga test-clone API route so that the flow is more clear.
               </p>
             </div>
+            
+            <div className="bg-green-500/10 border border-green-500/20 rounded-md p-3">
+              <p className="text-sm text-green-300 font-medium mb-2">LAST STEP</p>
+              <p className="text-xs text-neutral-300">
+                Generate a bunch of AI queries that you can test against to make sure it's fool proof.
+              </p>
+            </div>
           </div>
         }
         position="left"
