@@ -339,6 +339,23 @@ function SearchForm() {
     }
   };
   
+  // Add debounce reference for filter application
+  const filterUpdateTimeoutRef = useRef(null);
+  
+  // Function to apply filters with debounce
+  const debouncedFilterApplication = (fn) => {
+    // Clear any pending timeout
+    if (filterUpdateTimeoutRef.current) {
+      clearTimeout(filterUpdateTimeoutRef.current);
+    }
+    
+    // Set new timeout
+    filterUpdateTimeoutRef.current = setTimeout(() => {
+      fn();
+      filterUpdateTimeoutRef.current = null;
+    }, 500);
+  };
+  
   // Helper function to format large numbers
   const formatCount = (count) => {
     if (count >= 1000000) {
@@ -387,29 +404,16 @@ function SearchForm() {
     setShowFiltersEditor(!showFiltersEditor);
   };
   
-  const addFilterLine = () => {
-    const isFirst = pendingFilters.length === 0;
-    setPendingFilters((prev) => [
-      ...prev,
-      {
-        column: "",
-        condition: "contains",
-        tokens: [],
-        pendingText: "",
-        subop: isFirst ? "" : "AND"
-      }
-    ]);
-  };
-  
-  const removeFilterLine = (index) => {
-    setPendingFilters((prev) => prev.filter((_, i) => i !== index));
-  };
-  
   const updateFilterLine = (index, field, value) => {
     setPendingFilters((prev) => {
       const arr = [...prev];
       arr[index][field] = value;
       return arr;
+    });
+    
+    // Automatically apply filters when field changes (with debounce)
+    debouncedFilterApplication(() => {
+      applyFiltersAutomatically();
     });
   };
   
@@ -419,6 +423,11 @@ function SearchForm() {
       arr[index].subop = newOp;
       return arr;
     });
+    
+    // Automatically apply filters when subop changes (with debounce)
+    debouncedFilterApplication(() => {
+      applyFiltersAutomatically();
+    });
   };
   
   const updateLineTokens = (index, newTokens) => {
@@ -426,6 +435,11 @@ function SearchForm() {
       const arr = [...prev];
       arr[index].tokens = newTokens;
       return arr;
+    });
+    
+    // Automatically apply filters when tokens change (with debounce)
+    debouncedFilterApplication(() => {
+      applyFiltersAutomatically();
     });
   };
   
@@ -435,6 +449,28 @@ function SearchForm() {
       arr[index].pendingText = txt;
       return arr;
     });
+  };
+  
+  // New function to apply filters automatically without closing the filter editor
+  const applyFiltersAutomatically = async () => {
+    // Process any pending text in tokens
+    const updated = pendingFilters.map((rule) => {
+      const newRule = {...rule};
+      if ((rule.condition === "contains" || rule.condition === "equals") && rule.pendingText?.trim()) {
+        if (!rule.tokens.includes(rule.pendingText.trim())) {
+          newRule.tokens = [...(rule.tokens || []), rule.pendingText.trim()];
+          // Don't clear pendingText so user can continue typing
+        }
+      }
+      return newRule;
+    });
+    
+    setFilters(updated);
+    
+    // Trigger a search with new filters if there are any valid filters
+    if (updated.length > 0 && updated.some(f => f.tokens.length > 0 || f.condition === "is empty" || f.condition === "is not empty")) {
+      await fetchSearchResults(apiResults);
+    }
   };
   
   const applyFilters = async () => {
@@ -459,6 +495,32 @@ function SearchForm() {
     }
   };
   
+  const removeFilterLine = (index) => {
+    setPendingFilters((prev) => prev.filter((_, i) => i !== index));
+    
+    // Automatically apply filters when a line is removed (with debounce)
+    debouncedFilterApplication(() => {
+      applyFiltersAutomatically();
+    });
+  };
+  
+  const addFilterLine = () => {
+    const isFirst = pendingFilters.length === 0;
+    setPendingFilters((prev) => [
+      ...prev,
+      {
+        column: "",
+        condition: "contains",
+        tokens: [],
+        pendingText: "",
+        subop: isFirst ? "" : "AND"
+      }
+    ]);
+    
+    // We don't automatically apply when adding a new line because
+    // it needs to be configured first
+  };
+
   const cancelFilterEditing = () => {
     setPendingFilters(JSON.parse(JSON.stringify(filters)));
     setShowFiltersEditor(false);
@@ -1203,6 +1265,121 @@ function SearchForm() {
           </div>
         </div>
       )}
+
+      {/* Filter Editor Modal */}
+      {showFiltersEditor && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50">
+          <div className="bg-[#2a2a2a] border border-[#444] rounded-lg p-4 w-full max-w-3xl max-h-[80vh] overflow-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-white">Edit Filters</h3>
+              <div className="flex gap-2">
+                <div className="text-white text-sm mr-2">
+                  {isSearching ? (
+                    <span className="flex items-center">
+                      <div className="w-3 h-3 border-2 border-t-transparent border-green-400 rounded-full animate-spin mr-2"></div>
+                      Updating...
+                    </span>
+                  ) : (
+                    totalSearchResults > 0 && (
+                      <span className="text-green-400">
+                        {totalSearchResults.toLocaleString()} results found
+                      </span>
+                    )
+                  )}
+                </div>
+                <button 
+                  onClick={cancelFilterEditing}
+                  className="px-3 py-1 text-white text-sm rounded-md bg-[#333] hover:bg-[#444] border border-[#555]"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={applyFilters}
+                  className="px-3 py-1 text-white text-sm rounded-md bg-blue-600 hover:bg-blue-700"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              {pendingFilters.map((filter, index) => (
+                <div key={index} className="p-3 bg-[#222] border border-[#444] rounded-lg">
+                  <div className="flex justify-between items-center mb-2">
+                    {index > 0 && (
+                      <select
+                        value={filter.subop}
+                        onChange={(e) => updateLineSubop(index, e.target.value)}
+                        className="bg-[#333] border border-[#555] text-white py-1 px-2 rounded text-sm"
+                      >
+                        <option value="AND">AND</option>
+                        <option value="OR">OR</option>
+                      </select>
+                    )}
+                    {index === 0 && <div className="text-sm text-neutral-500">Where</div>}
+                    <button
+                      onClick={() => removeFilterLine(index)}
+                      className="px-1.5 py-0.5 bg-red-900/30 text-red-400 rounded-md text-xs hover:bg-red-900/50"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row gap-2 mb-2">
+                    <select
+                      value={filter.column}
+                      onChange={(e) => updateFilterLine(index, "column", e.target.value)}
+                      className="bg-[#333] border border-[#555] text-white py-2 px-3 rounded text-sm"
+                    >
+                      <option value="">Select column</option>
+                      <option value="Job title">Job Title</option>
+                      <option value="Industry">Industry</option>
+                      <option value="Location">Location</option>
+                      <option value="Locality">City</option>
+                      <option value="Region">State/Region</option>
+                      <option value="Postal Code">Postal Code</option>
+                      <option value="Country">Country</option>
+                      <option value="Organization Name">Company</option>
+                      <option value="Organization Domain">Domain</option>
+                      <option value="Organization Size">Company Size</option>
+                    </select>
+                    
+                    <select
+                      value={filter.condition}
+                      onChange={(e) => updateFilterLine(index, "condition", e.target.value)}
+                      className="bg-[#333] border border-[#555] text-white py-2 px-3 rounded text-sm"
+                    >
+                      <option value="contains">contains</option>
+                      <option value="equals">equals</option>
+                      <option value="is empty">is empty</option>
+                      <option value="is not empty">is not empty</option>
+                    </select>
+                  </div>
+                  
+                  {(filter.condition === "contains" || filter.condition === "equals") && (
+                    <div className="mt-3">
+                      <TokensInput
+                        tokens={filter.tokens}
+                        setTokens={(tokens) => updateLineTokens(index, tokens)}
+                        pendingText={filter.pendingText}
+                        setPendingText={(text) => updateLinePendingText(index, text)}
+                        column={filter.column}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+              
+              <button
+                onClick={addFilterLine}
+                className="w-full py-2 bg-[#333] hover:bg-[#444] border border-dashed border-[#666] text-neutral-400 rounded-md text-sm"
+              >
+                + Add Filter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1279,12 +1456,16 @@ function TokensInput({
   
   function addToken(token) {
     if (token && !tokens.includes(token)) {
-      setTokens([...tokens, token]);
+      const newTokens = [...tokens, token];
+      setTokens(newTokens);
+      // This triggers the filter update automatically
     }
   }
 
   function removeToken(token) {
-    setTokens(tokens.filter((t) => t !== token));
+    const newTokens = tokens.filter((t) => t !== token);
+    setTokens(newTokens);
+    // This triggers the filter update automatically
   }
 
   return (
