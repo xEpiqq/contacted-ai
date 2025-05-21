@@ -41,6 +41,14 @@ function SearchForm() {
   const [showFiltersEditor, setShowFiltersEditor] = useState(false);
   const [editingFilterIndex, setEditingFilterIndex] = useState(null);
 
+  // Added state for database selection
+  const [requiresFollowUp, setRequiresFollowUp] = useState(false);
+  const [followUpMessage, setFollowUpMessage] = useState("");
+  const [followUpOptions, setFollowUpOptions] = useState([]);
+  const [selectedFollowUpOption, setSelectedFollowUpOption] = useState(null);
+  const [recommendedDatabase, setRecommendedDatabase] = useState(null);
+  const [actualDatabase, setActualDatabase] = useState("usa4_new_v2");
+
   const textareaRef = useRef(null);
   const plusButtonRef = useRef(null);
   
@@ -68,6 +76,12 @@ function SearchForm() {
     setSearchResults([]);
     setTotalSearchResults(0);
     setSearchError(null);
+    setRequiresFollowUp(false);
+    setFollowUpMessage("");
+    setFollowUpOptions([]);
+    setSelectedFollowUpOption(null);
+    setRecommendedDatabase(null);
+    setActualDatabase("usa4_new_v2");
     
     // Start the timer
     processStartTimeRef.current = Date.now();
@@ -79,13 +93,44 @@ function SearchForm() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ description: text }),
+        body: JSON.stringify({ 
+          description: text,
+          // Include selected follow-up option if available
+          followUpResponse: selectedFollowUpOption ? selectedFollowUpOption.value : null
+        }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || `Request failed with status ${response.status}`);
+      }
+      
+      // Check if we need a follow-up for database selection
+      if (data.requiresFollowUp && data.stage === "database-selection") {
+        setRequiresFollowUp(true);
+        setFollowUpMessage(data.message || "Please provide more information");
+        setFollowUpOptions(data.options || []);
+        
+        // Calculate and set the processing time
+        if (processStartTimeRef.current) {
+          const endTime = Date.now();
+          const timeInSeconds = ((endTime - processStartTimeRef.current) / 1000).toFixed(2);
+          setProcessingTime(timeInSeconds);
+        }
+        
+        setIsLoading(false);
+        return;
+      }
+      
+      // Store database recommendation if available
+      if (data.recommendedDatabase) {
+        setRecommendedDatabase(data.recommendedDatabase);
+      }
+      
+      // Store actual database being used
+      if (data.actualDatabase) {
+        setActualDatabase(data.actualDatabase);
       }
       
       setApiResults(data);
@@ -419,6 +464,17 @@ function SearchForm() {
     setShowFiltersEditor(false);
   };
 
+  // Handle selecting a follow-up option and resubmitting
+  const handleFollowUpSelection = (option) => {
+    setSelectedFollowUpOption(option);
+    setRequiresFollowUp(false);
+    
+    // Automatically resubmit with the selected option
+    setTimeout(() => {
+      handleFormSubmit({ preventDefault: () => {} });
+    }, 100);
+  };
+
   return (
     <div
       className="w-full max-w-[690px] text-white"
@@ -537,6 +593,67 @@ function SearchForm() {
         </div>
       </form>
 
+      {/* Follow-up UI */}
+      {requiresFollowUp && (
+        <div className="mb-6 mt-6 p-4 bg-[#2b2b2b] border border-[#404040] rounded-lg">
+          <h3 className="text-lg font-semibold mb-3 text-green-400">We need more information:</h3>
+          <p className="mb-4 text-neutral-300">{followUpMessage}</p>
+          
+          {/* Custom response input */}
+          <div className="mb-4">
+            <input 
+              type="text" 
+              value={text}
+              onChange={handleTextChange}
+              placeholder="Or type your own response..."
+              className="w-full bg-[#212121] border border-[#404040] rounded-md px-3 py-2 text-white placeholder:text-neutral-600 focus:outline-none focus:border-green-500 mb-2"
+            />
+            <button
+              onClick={handleFormSubmit}
+              className="px-3 py-1.5 bg-white text-black hover:opacity-90 text-sm font-medium rounded-md"
+            >
+              Submit
+            </button>
+          </div>
+          
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-neutral-400 mb-1">Or select one of these options:</p>
+            {followUpOptions.map((option, index) => (
+              <button
+                key={index}
+                onClick={() => handleFollowUpSelection(option)}
+                className="text-left p-3 bg-[#303030] border border-[#404040] rounded-lg hover:bg-[#343434] transition-colors"
+              >
+                <span className="text-white">{option.text}</span>
+                {option.database && (
+                  <span className="ml-2 text-xs py-1 px-2 bg-blue-600/20 border border-blue-500/30 text-blue-400 rounded-full">
+                    {formatDatabaseName(option.database)}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Database Recommendation Info */}
+      {!requiresFollowUp && recommendedDatabase && (
+        <div className="mb-6 mt-3 p-3 bg-[#2b2b2b] border border-[#404040] rounded-lg">
+          <div className="flex items-center gap-2">
+            <Gem className="w-4 h-4 text-purple-400" />
+            <span className="text-sm text-neutral-300">
+              <span className="font-medium text-purple-400">Recommended database:</span>{" "}
+              {formatDatabaseName(recommendedDatabase)}
+              {recommendedDatabase !== actualDatabase && (
+                <span className="ml-2 text-xs py-1 px-2 bg-blue-600/20 border border-blue-500/30 text-blue-400 rounded-full">
+                  Using {formatDatabaseName(actualDatabase)}
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
+      )}
+
       {isLoading && (
         <div className="mt-6 text-center text-neutral-400">
           <div className="inline-flex items-center">
@@ -556,325 +673,110 @@ function SearchForm() {
         <div className="mt-6 p-4 bg-[#2b2b2b] border border-[#404040] rounded-lg">
           <h3 className="text-lg font-semibold mb-3 text-green-400">Suggested Criteria:</h3>
           
-          {apiResults.targetType && (
-            <div className="mb-4 border-b border-neutral-700 pb-3">
-              <h4 className="text-md font-medium text-neutral-300 mb-1.5">Target Type:</h4>
-              <div className="flex items-center gap-2">
-                <span className={`px-3 py-1.5 ${
-                  apiResults.targetType === "people" 
-                    ? "bg-purple-600/20 border border-purple-500/30 text-purple-300" 
-                    : "bg-amber-600/20 border border-amber-500/30 text-amber-300"
-                } text-sm rounded-full`}>
-                  {apiResults.targetType === "people" ? "👤 People" : "🏢 Local Businesses"}
-                </span>
-                {apiResults.targetTypeConfidence > 0 && (
-                  <span className="text-xs text-neutral-500">
-                    Confidence: {Math.round(apiResults.targetTypeConfidence * 100)}%
-                  </span>
-                )}
+          {/* Display job titles */}
+          {apiResults.jobTitles && apiResults.jobTitles.length > 0 && (
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <h4 className="text-md font-medium text-neutral-300">Job Titles:</h4>
+                <div className="flex items-center">
+                  {isVerifyingTitles && (
+                    <span className="text-xs text-neutral-500 flex items-center mr-3">
+                      <div className="w-3 h-3 border-t-transparent border border-blue-400 rounded-full animate-spin mr-1"></div>
+                      Finding optimal titles...
+                    </span>
+                  )}
+                  {processingTime && (
+                    <span className="text-xs text-teal-500 bg-teal-900/20 px-2 py-1 rounded flex items-center gap-1">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                      </svg>
+                      Process: {processingTime}s
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-          
-          {/* Display job titles and industry keywords if target type is people */}
-          {apiResults.targetType === "people" && (
-            <>
-              {apiResults.jobTitles && apiResults.jobTitles.length > 0 && (
-                <div className="mb-3">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <h4 className="text-md font-medium text-neutral-300">Job Titles:</h4>
-                    <div className="flex items-center">
-                      {isVerifyingTitles && (
-                        <span className="text-xs text-neutral-500 flex items-center mr-3">
-                          <div className="w-3 h-3 border-t-transparent border border-blue-400 rounded-full animate-spin mr-1"></div>
-                          Finding optimal titles...
-                        </span>
-                      )}
-                      {processingTime && (
-                        <span className="text-xs text-teal-500 bg-teal-900/20 px-2 py-1 rounded flex items-center gap-1">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12 6 12 12 16 14"></polyline>
-                          </svg>
-                          Process: {processingTime}s
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {apiResults.jobTitles.map((title, index) => {
-                    // Find the matching title data in titleMatches
-                    const titleMatch = apiResults.titleMatches?.find(match => match.title === title);
-                    
-                    return (
-                      <div key={index} className="mb-4 pb-3 border-b border-neutral-700 last:border-b-0">
-                        {/* AI-generated title */}
-                        <div className="flex flex-wrap gap-2 mb-1.5">
-                          <span 
-                            className={`px-3 py-1 text-xs rounded-full flex items-center gap-1 ${
-                              titleMatch?.winner?.isControl 
-                                ? "bg-red-600/20 border border-red-500/30 text-red-300" 
-                                : "bg-blue-600/20 border border-blue-500/30 text-blue-300"
-                            }`}
-                          >
-                            {title}
-                            {titleMatch?.winner?.isControl && (
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" 
-                                      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            )}
-                            {titleMatch?.winner?.count > 0 && (
-                              <span className="text-[9px] font-medium bg-black/30 px-1.5 py-0.5 rounded">
-                                {formatCount(titleMatch.winner.count)}
-                              </span>
-                            )}
-                          </span>
-                          <span className="text-xs text-neutral-500 self-center">
-                            AI suggestion
-                            {titleMatch?.winner?.isControl && (
-                              <span className="text-[8px] ml-1 font-medium bg-neutral-700/40 text-neutral-400 px-1 py-0.5 rounded-sm">
-                                Not used for search
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                        
-                        {/* Database matches */}
-                        {titleMatch && (
-                          <div className="ml-4 flex flex-col gap-1">
-                            {/* Winner (if not the control) */}
-                            {titleMatch.winner && !titleMatch.winner.isControl && (
-                              <div className="mb-1">
-                                <span className="text-xs text-neutral-400 mb-1">Selected match:</span>
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                  <span 
-                                    className="px-3 py-1 bg-red-600/20 border border-red-500/30 text-red-300 text-xs rounded-full flex items-center gap-1"
-                                    title={`${titleMatch.winner.count} profiles with this title`}
-                                  >
-                                    {titleMatch.winner.title}
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                      <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" 
-                                            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                    <span className="text-red-400/80 text-[9px] font-medium bg-red-900/30 px-1.5 py-0.5 rounded">
-                                      {formatCount(titleMatch.winner.count)}
-                                    </span>
-                                    {!titleMatch.winner.isControl && (
-                                      <span className="text-[8px] ml-1 font-semibold bg-green-900/40 text-green-300 px-1 py-0.5 rounded-sm">
-                                        Used for search
-                                      </span>
-                                    )}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* Alternates */}
-                            {titleMatch.alternates && titleMatch.alternates.length > 0 && (
-                              <div>
-                                <span className="text-xs text-neutral-400 mb-1">Other matches:</span>
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                  {titleMatch.alternates.slice(0, 3).map((match, matchIndex) => (
-                                    <span 
-                                      key={matchIndex} 
-                                      className="px-3 py-1 bg-neutral-600/20 border border-neutral-500/30 text-neutral-300 text-xs rounded-full flex items-center gap-1"
-                                      title={`${match.count} profiles with this title`}
-                                    >
-                                      {match.title}
-                                      <span className="text-neutral-400/80 text-[9px] font-medium bg-neutral-900/30 px-1.5 py-0.5 rounded">
-                                        {formatCount(match.count)}
-                                      </span>
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* No matches case */}
-                            {!titleMatch.winner && !titleMatch.alternates && (
-                              <span className="text-xs text-neutral-500">No similar titles found in database</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {apiResults.industryKeywords && apiResults.industryKeywords.length > 0 && (
-                <div className="mb-3">
-                  <h4 className="text-md font-medium text-neutral-300 mb-1.5">Industry Keywords:</h4>
-                  
-                  {apiResults.industryKeywords.map((keyword, index) => {
-                    // Find the matching keyword data in industryMatches
-                    const keywordMatch = apiResults.industryMatches?.find(match => match.keyword === keyword);
-                    
-                    return (
-                      <div key={index} className="mb-4 pb-3 border-b border-neutral-700 last:border-b-0">
-                        {/* AI-generated industry keyword */}
-                        <div className="flex flex-wrap gap-2 mb-1.5">
-                          <span 
-                            className={`px-3 py-1 text-xs rounded-full flex items-center gap-1 ${
-                              keywordMatch?.winner?.isControl 
-                                ? "bg-red-600/20 border border-red-500/30 text-red-300" 
-                                : !keywordMatch
-                                ? "bg-teal-600/20 border border-teal-500/30 text-teal-300"
-                                : "bg-blue-600/20 border border-blue-500/30 text-blue-300"
-                            }`}
-                          >
-                            {keyword}
-                            {keywordMatch?.winner?.isControl && (
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" 
-                                      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            )}
-                            {keywordMatch?.winner?.count > 0 && (
-                              <span className="text-[9px] font-medium bg-black/30 px-1.5 py-0.5 rounded">
-                                {formatCount(keywordMatch.winner.count)}
-                              </span>
-                            )}
-                          </span>
-                          <span className="text-xs text-neutral-500 self-center">
-                            AI suggestion
-                            {keywordMatch?.winner?.isControl && (
-                              <span className="text-[8px] ml-1 font-medium bg-neutral-700/40 text-neutral-400 px-1 py-0.5 rounded-sm">
-                                Not used for search
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                        
-                        {/* Database matches */}
-                        {!keywordMatch && (
-                          <div className="ml-4 flex flex-col gap-1">
-                            <span className="text-xs text-neutral-500">Industry not verified against database</span>
-                          </div>
-                        )}
-                        {keywordMatch && (
-                          <div className="ml-4 flex flex-col gap-1">
-                            {/* Winner (if not the control) */}
-                            {keywordMatch.winner && !keywordMatch.winner.isControl && (
-                              <div className="mb-1">
-                                <span className="text-xs text-neutral-400 mb-1">Selected match:</span>
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                  <span 
-                                    className="px-3 py-1 bg-red-600/20 border border-red-500/30 text-red-300 text-xs rounded-full flex items-center gap-1"
-                                    title={`${keywordMatch.winner.count} profiles with this industry`}
-                                  >
-                                    {keywordMatch.winner.keyword}
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                      <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" 
-                                            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                    <span className="text-red-400/80 text-[9px] font-medium bg-red-900/30 px-1.5 py-0.5 rounded">
-                                      {formatCount(keywordMatch.winner.count)}
-                                    </span>
-                                    {!keywordMatch.winner.isControl && (
-                                      <span className="text-[8px] ml-1 font-semibold bg-green-900/40 text-green-300 px-1 py-0.5 rounded-sm">
-                                        Used for search
-                                      </span>
-                                    )}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* Alternates */}
-                            {keywordMatch.alternates && keywordMatch.alternates.length > 0 && (
-                              <div>
-                                <span className="text-xs text-neutral-400 mb-1">Other matches:</span>
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                  {keywordMatch.alternates.slice(0, 3).map((match, matchIndex) => (
-                                    <span 
-                                      key={matchIndex} 
-                                      className="px-3 py-1 bg-neutral-600/20 border border-neutral-500/30 text-neutral-300 text-xs rounded-full flex items-center gap-1"
-                                      title={`${match.count} profiles with this industry`}
-                                    >
-                                      {match.keyword}
-                                      <span className="text-neutral-400/80 text-[9px] font-medium bg-neutral-900/30 px-1.5 py-0.5 rounded">
-                                        {formatCount(match.count)}
-                                      </span>
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* No matches case */}
-                            {!keywordMatch.winner && !keywordMatch.alternates && (
-                              <span className="text-xs text-neutral-500">No similar industries found in database</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {(!apiResults.jobTitles || apiResults.jobTitles.length === 0) && 
-              (!apiResults.industryKeywords || apiResults.industryKeywords.length === 0) && (
-                <p className="text-neutral-400 text-sm">No specific job titles or industry keywords were extracted. Try refining your description.</p>
-              )}
-
-              {/* Display location information if available */}
-              {apiResults.locationInfo && apiResults.locationInfo.value && apiResults.locationInfo.locationType !== "none" && (
-                <div className="mb-3">
-                  <h4 className="text-md font-medium text-neutral-300 mb-1.5">Location:</h4>
-                  
-                  <div className="mb-4 pb-3 border-b border-neutral-700">
-                    {/* AI-generated location */}
+              
+              {apiResults.jobTitles.map((title, index) => {
+                // Find the matching title data in titleMatches
+                const titleMatch = apiResults.titleMatches?.find(match => match.title === title);
+                
+                return (
+                  <div key={index} className="mb-4 pb-3 border-b border-neutral-700 last:border-b-0">
+                    {/* AI-generated title */}
                     <div className="flex flex-wrap gap-2 mb-1.5">
                       <span 
                         className={`px-3 py-1 text-xs rounded-full flex items-center gap-1 ${
-                          apiResults.locationMatches?.[0]?.winner?.isControl 
-                            ? "bg-blue-600/20 border border-blue-500/30 text-blue-300" 
-                            : !apiResults.locationMatches
-                            ? "bg-indigo-600/20 border border-indigo-500/30 text-indigo-300"
+                          titleMatch?.winner?.isControl 
+                            ? "bg-red-600/20 border border-red-500/30 text-red-300" 
                             : "bg-blue-600/20 border border-blue-500/30 text-blue-300"
                         }`}
                       >
-                        {apiResults.locationInfo.value}
-                        {apiResults.locationMatches?.[0]?.winner?.isControl && (
+                        {title}
+                        {titleMatch?.winner?.isControl && (
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" 
                                   stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                           </svg>
                         )}
-                        {apiResults.locationMatches?.[0]?.winner?.count > 0 && (
+                        {titleMatch?.winner?.count > 0 && (
                           <span className="text-[9px] font-medium bg-black/30 px-1.5 py-0.5 rounded">
-                            {formatCount(apiResults.locationMatches[0].winner.count)}
+                            {formatCount(titleMatch.winner.count)}
                           </span>
                         )}
-                        <span className="text-[8px] ml-1 font-semibold bg-green-900/40 text-green-300 px-1 py-0.5 rounded-sm">
-                          Used for search
-                        </span>
                       </span>
                       <span className="text-xs text-neutral-500 self-center">
-                        {apiResults.locationInfo.locationType === "city" ? "City" : 
-                         apiResults.locationInfo.locationType === "state" ? "State" : 
-                         apiResults.locationInfo.locationType === "postal_code" ? "ZIP Code" : 
-                         apiResults.locationInfo.locationType === "metro" ? "Metro Area" : 
-                         apiResults.locationInfo.locationType === "region" ? "Region" : "Location"}
+                        AI suggestion
+                        {titleMatch?.winner?.isControl && (
+                          <span className="text-[8px] ml-1 font-medium bg-neutral-700/40 text-neutral-400 px-1 py-0.5 rounded-sm">
+                            Not used for search
+                          </span>
+                        )}
                       </span>
                     </div>
                     
                     {/* Database matches */}
-                    {apiResults.locationMatches && apiResults.locationMatches[0] && (
+                    {titleMatch && (
                       <div className="ml-4 flex flex-col gap-1">
-                        {/* Show the database matches as alternates */}
-                        {apiResults.locationMatches[0].alternates && apiResults.locationMatches[0].alternates.length > 0 && (
-                          <div>
-                            <span className="text-xs text-neutral-400 mb-1">Database matches (not used for search):</span>
+                        {/* Winner (if not the control) */}
+                        {titleMatch.winner && !titleMatch.winner.isControl && (
+                          <div className="mb-1">
+                            <span className="text-xs text-neutral-400 mb-1">Selected match:</span>
                             <div className="flex flex-wrap gap-2 mt-1">
-                              {apiResults.locationMatches[0].alternates.slice(0, 3).map((match, matchIndex) => (
+                              <span 
+                                className="px-3 py-1 bg-red-600/20 border border-red-500/30 text-red-300 text-xs rounded-full flex items-center gap-1"
+                                title={`${titleMatch.winner.count} profiles with this title`}
+                              >
+                                {titleMatch.winner.title}
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" 
+                                        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                                <span className="text-red-400/80 text-[9px] font-medium bg-red-900/30 px-1.5 py-0.5 rounded">
+                                  {formatCount(titleMatch.winner.count)}
+                                </span>
+                                {!titleMatch.winner.isControl && (
+                                  <span className="text-[8px] ml-1 font-semibold bg-green-900/40 text-green-300 px-1 py-0.5 rounded-sm">
+                                    Used for search
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Alternates */}
+                        {titleMatch.alternates && titleMatch.alternates.length > 0 && (
+                          <div>
+                            <span className="text-xs text-neutral-400 mb-1">Other matches:</span>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {titleMatch.alternates.slice(0, 3).map((match, matchIndex) => (
                                 <span 
                                   key={matchIndex} 
                                   className="px-3 py-1 bg-neutral-600/20 border border-neutral-500/30 text-neutral-300 text-xs rounded-full flex items-center gap-1"
-                                  title={`${match.count} profiles in this location`}
+                                  title={`${match.count} profiles with this title`}
                                 >
-                                  {match.value}
+                                  {match.title}
                                   <span className="text-neutral-400/80 text-[9px] font-medium bg-neutral-900/30 px-1.5 py-0.5 rounded">
                                     {formatCount(match.count)}
                                   </span>
@@ -885,399 +787,419 @@ function SearchForm() {
                         )}
                         
                         {/* No matches case */}
-                        {!apiResults.locationMatches[0].alternates || apiResults.locationMatches[0].alternates.length === 0 && (
-                          <span className="text-xs text-neutral-500">No similar locations found in database</span>
+                        {!titleMatch.winner && !titleMatch.alternates && (
+                          <span className="text-xs text-neutral-500">No similar titles found in database</span>
                         )}
                       </div>
                     )}
                   </div>
-                </div>
-              )}
-            </>
+                );
+              })}
+            </div>
           )}
 
-          {/* Display business categories and location keywords if target type is local_businesses */}
-          {apiResults.targetType === "local_businesses" && (
-            <>
-              {apiResults.businessCategories && apiResults.businessCategories.length > 0 && (
-                <div className="mb-3">
-                  <h4 className="text-md font-medium text-neutral-300 mb-1.5">Business Categories:</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {apiResults.businessCategories.map((category, index) => (
-                      <span key={index} className="px-3 py-1 bg-orange-600/20 border border-orange-500/30 text-orange-300 text-xs rounded-full">
-                        {category}
+          {/* Display industry keywords */}
+          {apiResults.industryKeywords && apiResults.industryKeywords.length > 0 && (
+            <div className="mb-3">
+              <h4 className="text-md font-medium text-neutral-300 mb-1.5">Industry Keywords:</h4>
+              
+              {apiResults.industryKeywords.map((keyword, index) => {
+                // Find the matching keyword data in industryMatches
+                const keywordMatch = apiResults.industryMatches?.find(match => match.keyword === keyword);
+                
+                return (
+                  <div key={index} className="mb-4 pb-3 border-b border-neutral-700 last:border-b-0">
+                    {/* AI-generated industry keyword */}
+                    <div className="flex flex-wrap gap-2 mb-1.5">
+                      <span 
+                        className={`px-3 py-1 text-xs rounded-full flex items-center gap-1 ${
+                          keywordMatch?.winner?.isControl 
+                            ? "bg-red-600/20 border border-red-500/30 text-red-300" 
+                            : !keywordMatch
+                            ? "bg-teal-600/20 border border-teal-500/30 text-teal-300"
+                            : "bg-blue-600/20 border border-blue-500/30 text-blue-300"
+                        }`}
+                      >
+                        {keyword}
+                        {keywordMatch?.winner?.isControl && (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" 
+                                  stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                        {keywordMatch?.winner?.count > 0 && (
+                          <span className="text-[9px] font-medium bg-black/30 px-1.5 py-0.5 rounded">
+                            {formatCount(keywordMatch.winner.count)}
+                          </span>
+                        )}
                       </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {apiResults.locationKeywords && apiResults.locationKeywords.length > 0 && (
-                <div>
-                  <h4 className="text-md font-medium text-neutral-300 mb-1.5">Location Keywords:</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {apiResults.locationKeywords.map((location, index) => (
-                      <span key={index} className="px-3 py-1 bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 text-xs rounded-full">
-                        {location}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {(!apiResults.businessCategories || apiResults.businessCategories.length === 0) && 
-              (!apiResults.locationKeywords || apiResults.locationKeywords.length === 0) && (
-                <p className="text-neutral-400 text-sm">No specific business categories or location keywords were extracted. Try refining your description.</p>
-              )}
-            </>
-          )}
-
-          {/* Search Results Section */}
-          {searchResults.length > 0 && (
-            <div className="mt-6 border-t border-neutral-700 pt-4">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-blue-400">Search Results</h3>
-                <span className="text-sm text-neutral-400">Found {totalSearchResults.toLocaleString()} contacts</span>
-              </div>
-              
-              {/* Results Table */}
-              <div className="overflow-x-auto w-full border border-[#333333] rounded-md mb-4">
-                <table className="min-w-full border-collapse">
-                  <thead>
-                    <tr className="bg-[#252525] border-b border-[#333333]">
-                      <th className="py-2 px-4 text-sm font-medium text-neutral-300 text-left">Full Name</th>
-                      <th className="py-2 px-4 text-sm font-medium text-neutral-300 text-left">Job Title</th>
-                      <th className="py-2 px-4 text-sm font-medium text-neutral-300 text-left">Company</th>
-                      <th className="py-2 px-4 text-sm font-medium text-neutral-300 text-left">Industry</th>
-                      <th className="py-2 px-4 text-sm font-medium text-neutral-300 text-left">Location</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {searchResults.map((result, index) => (
-                      <tr key={index} className="border-b border-[#333333] hover:bg-[#252525]">
-                        <td className="py-2 px-4 text-sm text-white">{result["Full name"] || "—"}</td>
-                        <td className="py-2 px-4 text-sm text-white">{result["Job title"] || "—"}</td>
-                        <td className="py-2 px-4 text-sm text-white">{result["Organization Name"] || "—"}</td>
-                        <td className="py-2 px-4 text-sm text-white">{result["Industry"] || "—"}</td>
-                        <td className="py-2 px-4 text-sm text-white">{result["Location"] || "—"}</td>
-                      </tr>
-                    ))}
-                    {isSearching && Array(3).fill(0).map((_, i) => (
-                      <tr key={`loading-${i}`} className="animate-pulse border-b border-[#333333]">
-                        {Array(5).fill(0).map((_, j) => (
-                          <td key={`cell-${i}-${j}`} className="py-2 px-4">
-                            <div className="h-4 bg-[#303030] rounded w-full" />
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              
-              {/* Pagination Controls */}
-              {totalSearchResults > resultsPerPage && (
-                <div className="flex justify-between items-center">
-                  <div className="text-sm text-neutral-400">
-                    Showing {page * resultsPerPage + 1} - {Math.min((page + 1) * resultsPerPage, totalSearchResults)} of {totalSearchResults.toLocaleString()}
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => fetchSearchResults(apiResults, Math.max(0, page - 1))}
-                      disabled={page === 0 || isSearching}
-                      className={`px-3 py-1.5 text-xs rounded-md border ${
-                        page === 0 || isSearching ? 'bg-[#252525] text-neutral-500 border-[#333333] cursor-not-allowed' : 'bg-[#252525] hover:bg-[#303030] text-white border-[#404040]'
-                      }`}
-                    >
-                      Previous
-                    </button>
-                    <button
-                      onClick={() => fetchSearchResults(apiResults, page + 1)}
-                      disabled={
-                        (page + 1) * resultsPerPage >= totalSearchResults || isSearching
-                      }
-                      className={`px-3 py-1.5 text-xs rounded-md border ${
-                        (page + 1) * resultsPerPage >= totalSearchResults || isSearching
-                          ? 'bg-[#252525] text-neutral-500 border-[#333333] cursor-not-allowed'
-                          : 'bg-[#252525] hover:bg-[#303030] text-white border-[#404040]'
-                      }`}
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              )}
-              
-              {/* Show More Results Button */}
-              {totalSearchResults > 10 && resultsPerPage === 10 && (
-                <div className="mt-4 flex justify-center">
-                  <button
-                    onClick={() => {
-                      setResultsPerPage(25);
-                      fetchSearchResults(apiResults, 0);
-                    }}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-md flex items-center gap-2"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-list">
-                      <line x1="8" x2="21" y1="6" y2="6" />
-                      <line x1="8" x2="21" y1="12" y2="12" />
-                      <line x1="8" x2="21" y1="18" y2="18" />
-                      <line x1="3" x2="3" y1="6" y2="6" />
-                      <line x1="3" x2="3" y1="12" y2="12" />
-                      <line x1="3" x2="3" y1="18" y2="18" />
-                    </svg>
-                    Show More Results
-                  </button>
-                </div>
-              )}
-              
-              {/* Search Error Message */}
-              {searchError && (
-                <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                  <strong>Search Error:</strong> {searchError}
-                </div>
-              )}
-            </div>
-          )}
-          
-          {/* Search Loading Indicator */}
-          {isSearching && searchResults.length === 0 && (
-            <div className="mt-6 text-center text-neutral-400 border-t border-neutral-700 pt-4">
-              <div className="inline-flex items-center">
-                <div className="w-4 h-4 border-2 border-t-transparent border-blue-400 rounded-full animate-spin mr-2"></div>
-                <span>Searching database for matching contacts...</span>
-              </div>
-            </div>
-          )}
-          
-          {/* No Search Results Message */}
-          {!isSearching && totalSearchResults === 0 && apiResults.jobTitles && apiResults.jobTitles.length > 0 && !searchError && (
-            <div className="mt-6 text-center text-neutral-400 border-t border-neutral-700 pt-4">
-              <p>No matching contacts found. Try adjusting your criteria.</p>
-            </div>
-          )}
-
-          {/* Button to view search results if not automatically loaded */}
-          {!searchResults.length && !isSearching && !searchError && apiResults.jobTitles && apiResults.jobTitles.length > 0 && (
-            <div className="mt-4 text-center">
-              <button 
-                onClick={() => fetchSearchResults(apiResults)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-md flex items-center gap-2 mx-auto"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8"></circle>
-                  <path d="m21 21-4.3-4.3"></path>
-                </svg>
-                View Database Results
-              </button>
-            </div>
-          )}
-          
-          {/* Active Filters and Edit Button */}
-          {filters.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-neutral-700">
-              <div className="flex justify-between items-center mb-3">
-                <h4 className="text-md font-medium text-neutral-300">Active Filters:</h4>
-                <button
-                  onClick={toggleFiltersEditor}
-                  className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-white text-xs rounded-md border border-[#404040] flex items-center gap-1"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                  </svg>
-                  Edit Filters
-                </button>
-              </div>
-              
-              <div className="mb-4 flex flex-wrap gap-2">
-                {filters.map((f, i) => {
-                  const prefix = i === 0 ? "Where" : f.subop || "AND";
-                  const safeTokens = Array.isArray(f.tokens) ? f.tokens : [];
-                  let desc = "";
-                  if (f.condition === "is empty" || f.condition === "is not empty") {
-                    desc = f.condition;
-                  } else {
-                    desc = `${f.condition} [${safeTokens.join(", ")}]`;
-                  }
-                  return (
-                    <div key={i} className="bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs px-2 py-1 rounded-md">
-                      <span>
-                        <strong>{prefix}</strong> {f.column} {desc}
+                      <span className="text-xs text-neutral-500 self-center">
+                        AI suggestion
+                        {keywordMatch?.winner?.isControl && (
+                          <span className="text-[8px] ml-1 font-medium bg-neutral-700/40 text-neutral-400 px-1 py-0.5 rounded-sm">
+                            Not used for search
+                          </span>
+                        )}
                       </span>
                     </div>
-                  );
-                })}
+                    
+                    {/* Database matches */}
+                    {!keywordMatch && (
+                      <div className="ml-4 flex flex-col gap-1">
+                        <span className="text-xs text-neutral-500">Industry not verified against database</span>
+                      </div>
+                    )}
+                    {keywordMatch && (
+                      <div className="ml-4 flex flex-col gap-1">
+                        {/* Winner (if not the control) */}
+                        {keywordMatch.winner && !keywordMatch.winner.isControl && (
+                          <div className="mb-1">
+                            <span className="text-xs text-neutral-400 mb-1">Selected match:</span>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              <span 
+                                className="px-3 py-1 bg-red-600/20 border border-red-500/30 text-red-300 text-xs rounded-full flex items-center gap-1"
+                                title={`${keywordMatch.winner.count} profiles with this industry`}
+                              >
+                                {keywordMatch.winner.keyword}
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" 
+                                        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                                <span className="text-red-400/80 text-[9px] font-medium bg-red-900/30 px-1.5 py-0.5 rounded">
+                                  {formatCount(keywordMatch.winner.count)}
+                                </span>
+                                {!keywordMatch.winner.isControl && (
+                                  <span className="text-[8px] ml-1 font-semibold bg-green-900/40 text-green-300 px-1 py-0.5 rounded-sm">
+                                    Used for search
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Alternates */}
+                        {keywordMatch.alternates && keywordMatch.alternates.length > 0 && (
+                          <div>
+                            <span className="text-xs text-neutral-400 mb-1">Other matches:</span>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {keywordMatch.alternates.slice(0, 3).map((match, matchIndex) => (
+                                <span 
+                                  key={matchIndex} 
+                                  className="px-3 py-1 bg-neutral-600/20 border border-neutral-500/30 text-neutral-300 text-xs rounded-full flex items-center gap-1"
+                                  title={`${match.count} profiles with this industry`}
+                                >
+                                  {match.keyword}
+                                  <span className="text-neutral-400/80 text-[9px] font-medium bg-neutral-900/30 px-1.5 py-0.5 rounded">
+                                    {formatCount(match.count)}
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* No matches case */}
+                        {!keywordMatch.winner && !keywordMatch.alternates && (
+                          <span className="text-xs text-neutral-500">No similar industries found in database</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* No results message */}
+          {(!apiResults.jobTitles || apiResults.jobTitles.length === 0) && 
+          (!apiResults.industryKeywords || apiResults.industryKeywords.length === 0) &&
+          (!apiResults.businessCategories || apiResults.businessCategories.length === 0) && (
+            <p className="text-neutral-400 text-sm">No specific criteria were extracted. Try refining your description.</p>
+          )}
+
+          {/* Display business categories if available */}
+          {apiResults.businessCategories && apiResults.businessCategories.length > 0 && (
+            <div className="mb-3">
+              <h4 className="text-md font-medium text-neutral-300 mb-1.5">Business Categories:</h4>
+              <div className="flex flex-wrap gap-2">
+                {apiResults.businessCategories.map((category, index) => (
+                  <span key={index} className="px-3 py-1 bg-orange-600/20 border border-orange-500/30 text-orange-300 text-xs rounded-full">
+                    {category}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Display location keywords if available */}
+          {apiResults.locationKeywords && apiResults.locationKeywords.length > 0 && (
+            <div className="mb-3">
+              <h4 className="text-md font-medium text-neutral-300 mb-1.5">Location Keywords:</h4>
+              <div className="flex flex-wrap gap-2">
+                {apiResults.locationKeywords.map((location, index) => (
+                  <span key={index} className="px-3 py-1 bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 text-xs rounded-full">
+                    {location}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Display location information if available */}
+          {apiResults.locationInfo && apiResults.locationInfo.value && apiResults.locationInfo.locationType !== "none" && (
+            <div className="mb-3">
+              <h4 className="text-md font-medium text-neutral-300 mb-1.5">Location:</h4>
+              
+              <div className="mb-4 pb-3 border-b border-neutral-700">
+                {/* AI-generated location */}
+                <div className="flex flex-wrap gap-2 mb-1.5">
+                  <span 
+                    className={`px-3 py-1 text-xs rounded-full flex items-center gap-1 ${
+                      apiResults.locationMatches?.[0]?.winner?.isControl 
+                        ? "bg-blue-600/20 border border-blue-500/30 text-blue-300" 
+                        : !apiResults.locationMatches
+                        ? "bg-indigo-600/20 border border-indigo-500/30 text-indigo-300"
+                        : "bg-blue-600/20 border border-blue-500/30 text-blue-300"
+                    }`}
+                  >
+                    {apiResults.locationInfo.value}
+                    {apiResults.locationMatches?.[0]?.winner?.isControl && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" 
+                              stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                    {apiResults.locationMatches?.[0]?.winner?.count > 0 && (
+                      <span className="text-[9px] font-medium bg-black/30 px-1.5 py-0.5 rounded">
+                        {formatCount(apiResults.locationMatches[0].winner.count)}
+                      </span>
+                    )}
+                    <span className="text-[8px] ml-1 font-semibold bg-green-900/40 text-green-300 px-1 py-0.5 rounded-sm">
+                      Used for search
+                    </span>
+                  </span>
+                  <span className="text-xs text-neutral-500 self-center">
+                    {apiResults.locationInfo.locationType === "city" ? "City" : 
+                      apiResults.locationInfo.locationType === "state" ? "State" : 
+                      apiResults.locationInfo.locationType === "postal_code" ? "ZIP Code" : 
+                      apiResults.locationInfo.locationType === "metro" ? "Metro Area" : 
+                      apiResults.locationInfo.locationType === "region" ? "Region" : "Location"}
+                  </span>
+                </div>
+                
+                {/* Database matches */}
+                {apiResults.locationMatches && apiResults.locationMatches[0] && (
+                  <div className="ml-4 flex flex-col gap-1">
+                    {/* Show the database matches as alternates */}
+                    {apiResults.locationMatches[0].alternates && apiResults.locationMatches[0].alternates.length > 0 && (
+                      <div>
+                        <span className="text-xs text-neutral-400 mb-1">Database matches (not used for search):</span>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {apiResults.locationMatches[0].alternates.slice(0, 3).map((match, matchIndex) => (
+                            <span 
+                              key={matchIndex} 
+                              className="px-3 py-1 bg-neutral-600/20 border border-neutral-500/30 text-neutral-300 text-xs rounded-full flex items-center gap-1"
+                              title={`${match.count} profiles in this location`}
+                            >
+                              {match.value}
+                              <span className="text-neutral-400/80 text-[9px] font-medium bg-neutral-900/30 px-1.5 py-0.5 rounded">
+                                {formatCount(match.count)}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* No matches case */}
+                    {!apiResults.locationMatches[0].alternates || apiResults.locationMatches[0].alternates.length === 0 && (
+                      <span className="text-xs text-neutral-500">No similar locations found in database</span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
       )}
-      
-      <div className="text-right mt-1">
-        <span className="text-xs text-neutral-600">Powered by OpenAI</span>
-      </div>
 
-      {/* Filter Editor Modal */}
-      {showFiltersEditor && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#252525] rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b border-[#404040] flex justify-between items-center">
-              <h3 className="text-lg font-medium text-white">Edit Search Filters</h3>
-              <button 
-                onClick={cancelFilterEditing}
-                className="text-neutral-400 hover:text-white"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-            
-            <div className="p-4 space-y-4">
-              {pendingFilters.map((rule, index) => (
-                <div
-                  key={index}
-                  className="bg-[#303030] border border-[#404040] p-3 rounded-md"
-                >
-                  <div className="space-y-3">
-                    {index > 0 && (
-                      <div>
-                        <div className="text-xs text-neutral-400 mb-1">Operator</div>
-                        <select
-                          value={rule.subop}
-                          onChange={(e) => updateLineSubop(index, e.target.value)}
-                          className="w-full bg-[#252525] border border-[#404040] rounded-md py-1.5 px-2 text-sm text-white"
-                        >
-                          <option value="AND">AND</option>
-                          <option value="OR">OR</option>
-                        </select>
-                      </div>
-                    )}
-                    
-                    <div>
-                      <div className="text-xs text-neutral-400 mb-1">Column</div>
-                      <Combobox
-                        value={rule.column}
-                        onChange={(val) => updateFilterLine(index, "column", val)}
-                      >
-                        <div className="relative w-full">
-                          <Combobox.Button
-                            className="relative w-full border border-[#404040] bg-[#252525] text-white text-left rounded-md py-1.5 px-3 text-sm"
-                          >
-                            <Combobox.Input
-                              onChange={(e) => {
-                                updateFilterLine(index, "column", e.target.value);
-                              }}
-                              displayValue={(val) => val}
-                              placeholder="Select column..."
-                              className="w-full bg-transparent focus:outline-none"
-                            />
-                            <span className="absolute inset-y-0 right-0 flex items-center pr-2">
-                              <ChevronUpDownIcon
-                                className="h-5 w-5 text-neutral-400"
-                                aria-hidden="true"
-                              />
-                            </span>
-                          </Combobox.Button>
-                          <Combobox.Options
-                            className="absolute z-10 mt-1 w-full bg-[#252525] border border-[#404040] rounded-md max-h-40 overflow-auto"
-                          >
-                            {[
-                              "Job title", 
-                              "Full name", 
-                              "Industry", 
-                              "Location",
-                              "Locality",
-                              "Region",
-                              "Country",
-                              "Postal Code", 
-                              "Organization Name", 
-                              "Seniority"
-                            ].map((column) => (
-                              <Combobox.Option
-                                key={column}
-                                value={column}
-                                className={({ active }) =>
-                                  `cursor-pointer select-none px-3 py-2 text-sm ${
-                                    active
-                                      ? "bg-green-500/20 text-green-400"
-                                      : "text-white"
-                                  }`
-                                }
-                              >
-                                {column}
-                              </Combobox.Option>
-                            ))}
-                          </Combobox.Options>
-                        </div>
-                      </Combobox>
-                    </div>
-                    
-                    <div>
-                      <div className="text-xs text-neutral-400 mb-1">Condition</div>
-                      <select
-                        value={rule.condition}
-                        onChange={(e) =>
-                          updateFilterLine(index, "condition", e.target.value)
-                        }
-                        className="w-full bg-[#252525] border border-[#404040] rounded-md py-1.5 px-2 text-sm text-white"
-                      >
-                        <option value="contains">Contains</option>
-                        <option value="equals">Equals</option>
-                        <option value="is empty">Is Empty</option>
-                        <option value="is not empty">Is Not Empty</option>
-                      </select>
-                    </div>
-                  
-                    {(rule.condition === "contains" || rule.condition === "equals") && (
-                      <div>
-                        <div className="text-xs text-neutral-400 mb-1">Search Terms</div>
-                        <TokensInput
-                          tokens={rule.tokens}
-                          setTokens={(arr) => updateLineTokens(index, arr)}
-                          pendingText={rule.pendingText || ""}
-                          setPendingText={(txt) => updateLinePendingText(index, txt)}
-                          tableName="usa4_new_v2"
-                          column={rule.column}
-                        />
-                      </div>
-                    )}
-                  
-                    <div>
-                      <button 
-                        onClick={() => removeFilterLine(index)}
-                        className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-white text-xs rounded-md border border-[#404040] mt-2"
-                      >
-                        Remove Rule
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              
+      {/* Search Results Section */}
+      {searchResults.length > 0 && (
+        <div className="mt-6 border-t border-neutral-700 pt-4">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-blue-400">Search Results</h3>
+            <span className="text-sm text-neutral-400">Found {totalSearchResults.toLocaleString()} contacts</span>
+          </div>
+          
+          {/* Results Table */}
+          <div className="overflow-x-auto w-full border border-[#333333] rounded-md mb-4">
+            <table className="min-w-full border-collapse">
+              <thead>
+                <tr className="bg-[#252525] border-b border-[#333333]">
+                  <th className="py-2 px-4 text-sm font-medium text-neutral-300 text-left">Full Name</th>
+                  <th className="py-2 px-4 text-sm font-medium text-neutral-300 text-left">Job Title</th>
+                  <th className="py-2 px-4 text-sm font-medium text-neutral-300 text-left">Company</th>
+                  <th className="py-2 px-4 text-sm font-medium text-neutral-300 text-left">Industry</th>
+                  <th className="py-2 px-4 text-sm font-medium text-neutral-300 text-left">Location</th>
+                </tr>
+              </thead>
+              <tbody>
+                {searchResults.map((result, index) => (
+                  <tr key={index} className="border-b border-[#333333] hover:bg-[#252525]">
+                    <td className="py-2 px-4 text-sm text-white">{result["Full name"] || "—"}</td>
+                    <td className="py-2 px-4 text-sm text-white">{result["Job title"] || "—"}</td>
+                    <td className="py-2 px-4 text-sm text-white">{result["Organization Name"] || "—"}</td>
+                    <td className="py-2 px-4 text-sm text-white">{result["Industry"] || "—"}</td>
+                    <td className="py-2 px-4 text-sm text-white">{result["Location"] || "—"}</td>
+                  </tr>
+                ))}
+                {isSearching && Array(3).fill(0).map((_, i) => (
+                  <tr key={`loading-${i}`} className="animate-pulse border-b border-[#333333]">
+                    {Array(5).fill(0).map((_, j) => (
+                      <td key={`cell-${i}-${j}`} className="py-2 px-4">
+                        <div className="h-4 bg-[#303030] rounded w-full" />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Pagination Controls */}
+          {totalSearchResults > resultsPerPage && (
+            <div className="flex justify-between items-center">
+              <div className="text-sm text-neutral-400">
+                Showing {page * resultsPerPage + 1} - {Math.min((page + 1) * resultsPerPage, totalSearchResults)} of {totalSearchResults.toLocaleString()}
+              </div>
               <div className="flex gap-2">
                 <button
-                  onClick={addFilterLine}
-                  className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-white text-xs rounded-md border border-[#404040] flex items-center gap-1"
+                  onClick={() => fetchSearchResults(apiResults, Math.max(0, page - 1))}
+                  disabled={page === 0 || isSearching}
+                  className={`px-3 py-1.5 text-xs rounded-md border ${
+                    page === 0 || isSearching ? 'bg-[#252525] text-neutral-500 border-[#333333] cursor-not-allowed' : 'bg-[#252525] hover:bg-[#303030] text-white border-[#404040]'
+                  }`}
                 >
-                  <span>+</span> Add Rule
+                  Previous
                 </button>
-                
-                <button 
-                  onClick={applyFilters}
-                  className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-black font-medium text-xs rounded-md ml-auto"
+                <button
+                  onClick={() => fetchSearchResults(apiResults, page + 1)}
+                  disabled={
+                    (page + 1) * resultsPerPage >= totalSearchResults || isSearching
+                  }
+                  className={`px-3 py-1.5 text-xs rounded-md border ${
+                    (page + 1) * resultsPerPage >= totalSearchResults || isSearching
+                      ? 'bg-[#252525] text-neutral-500 border-[#333333] cursor-not-allowed'
+                      : 'bg-[#252525] hover:bg-[#303030] text-white border-[#404040]'
+                  }`}
                 >
-                  Apply Filters
-                </button>
-                
-                <button 
-                  onClick={cancelFilterEditing}
-                  className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-white text-xs rounded-md border border-[#404040]"
-                >
-                  Cancel
+                  Next
                 </button>
               </div>
             </div>
+          )}
+          
+          {/* Show More Results Button */}
+          {totalSearchResults > 10 && resultsPerPage === 10 && (
+            <div className="mt-4 flex justify-center">
+              <button
+                onClick={() => {
+                  setResultsPerPage(25);
+                  fetchSearchResults(apiResults, 0);
+                }}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-md flex items-center gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-list">
+                  <line x1="8" x2="21" y1="6" y2="6" />
+                  <line x1="8" x2="21" y1="12" y2="12" />
+                  <line x1="8" x2="21" y1="18" y2="18" />
+                  <line x1="3" x2="3" y1="6" y2="6" />
+                  <line x1="3" x2="3" y1="12" y2="12" />
+                  <line x1="3" x2="3" y1="18" y2="18" />
+                </svg>
+                Show More Results
+              </button>
+            </div>
+          )}
+          
+          {/* Search Error Message */}
+          {searchError && (
+            <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+              <strong>Search Error:</strong> {searchError}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Search Loading Indicator */}
+      {isSearching && searchResults.length === 0 && (
+        <div className="mt-6 text-center text-neutral-400 border-t border-neutral-700 pt-4">
+          <div className="inline-flex items-center">
+            <div className="w-4 h-4 border-2 border-t-transparent border-blue-400 rounded-full animate-spin mr-2"></div>
+            <span>Searching database for matching contacts...</span>
+          </div>
+        </div>
+      )}
+      
+      {/* No Search Results Message */}
+      {!isSearching && totalSearchResults === 0 && apiResults && apiResults.jobTitles && apiResults.jobTitles.length > 0 && !searchError && (
+        <div className="mt-6 text-center text-neutral-400 border-t border-neutral-700 pt-4">
+          <p>No matching contacts found. Try adjusting your criteria.</p>
+        </div>
+      )}
+
+      {/* Button to view search results if not automatically loaded */}
+      {!searchResults.length && !isSearching && !searchError && apiResults && apiResults.jobTitles && apiResults.jobTitles.length > 0 && (
+        <div className="mt-4 text-center">
+          <button 
+            onClick={() => fetchSearchResults(apiResults)}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-md flex items-center gap-2 mx-auto"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.3-4.3"></path>
+            </svg>
+            View Database Results
+          </button>
+        </div>
+      )}
+      
+      {/* Active Filters and Edit Button */}
+      {filters.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-neutral-700">
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="text-md font-medium text-neutral-300">Active Filters:</h4>
+            <button
+              onClick={toggleFiltersEditor}
+              className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-white text-xs rounded-md border border-[#404040] flex items-center gap-1"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+              Edit Filters
+            </button>
+          </div>
+          
+          <div className="mb-4 flex flex-wrap gap-2">
+            {filters.map((f, i) => {
+              const prefix = i === 0 ? "Where" : f.subop || "AND";
+              const safeTokens = Array.isArray(f.tokens) ? f.tokens : [];
+              let desc = "";
+              if (f.condition === "is empty" || f.condition === "is not empty") {
+                desc = f.condition;
+              } else {
+                desc = `${f.condition} [${safeTokens.join(", ")}]`;
+              }
+              return (
+                <div key={i} className="bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs px-2 py-1 rounded-md">
+                  <span>
+                    <strong>{prefix}</strong> {f.column} {desc}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1447,6 +1369,22 @@ function TokensInput({
       )}
     </div>
   );
+}
+
+// Helper function to display friendly database names
+function formatDatabaseName(dbName) {
+  switch(dbName) {
+    case "usa4_new_v2":
+      return "US Professionals";
+    case "otc1_new_v2":
+      return "International Professionals";
+    case "eap1_new_v2":
+      return "Global B2B Contacts";
+    case "deez_3_v3":
+      return "US Local Businesses";
+    default:
+      return dbName;
+  }
 }
 
 export default function TestClonePage() {

@@ -6,27 +6,160 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Database selection system prompt from select-database route
+const DB_SELECTION_PROMPT = `You are an expert system for selecting the most relevant database for a user's query.
+You have access to information about four databases, identified by their internal names:
+
+1.  **\`usa4_new_v2\`**:
+    * **Focus**: Comprehensive data on professionals located **within the USA**.
+    * **Contains**: Names, job titles, contact details, LinkedIn profiles, skills, company affiliations, industry, and US location specifics.
+    * **Best for queries like**: "Find software engineers in California," "List VPs of Marketing in US tech companies," "Who are contacts at [US Company Name]?"
+    * **Available Fields**: Full name, job title, emails (86.3%), phone numbers (36.2%), LinkedIn details (95%+), company info, location data (US only), skills (49.9%), gender (85.4%), industry data, and social media links for some contacts (Twitter, Facebook limited coverage).
+
+2.  **\`otc1_new_v2\`**:
+    * **Focus**: Comprehensive data on professionals located **exclusively outside of the USA**.
+    * **Contains**: Names, job titles, contact details, LinkedIn profiles, skills, company affiliations, industry, and international location specifics (for any country except the USA).
+    * **Best for queries like**: "Find project managers in Canada," "List contacts at [UK Company Name]," "Who are renewable energy experts in Germany?"
+    * **Available Fields**: Full name, job title (64.1%), email (92.4%), limited phone numbers (2%), LinkedIn details (90%+), company info, international locations (no US data), skills (33.3%), gender (47.5%), industry data, and very limited social media information.
+
+3.  **\`eap1_new_v2\`**:
+    * **Focus**: A global B2B database of individual business contacts, with a strong emphasis on emails. This database can include contacts from any country, including the US.
+    * **Contains**: Person's name, title, email, phone, company name, LinkedIn URL, global location, job function, and seniority.
+    * **Best for queries like**: "I need email addresses of HR Managers for companies in the automotive sector worldwide," "Find Directors of Operations in manufacturing companies in Germany," "List business contacts at [Global Company Name]."
+    * **Available Fields**: Person name, job title (99%), email (95.6%), phone numbers (82%), LinkedIn details (100%), company name, job function, seniority level, employment dates, and location information (cities, states, countries). Stronger focus on verified business emails compared to other databases.
+
+4.  **\`deez_3_v3\`**:
+    * **Focus**: Information on local businesses, primarily **within the USA**.
+    * **Contains**: Business names, physical addresses, phone numbers, websites, business categories, and details about their online presence (social media, reviews, tech stack).
+    * **Best for queries like**: "Find plumbers in Greensboro, NC," "List car dealerships in Arizona that use Shopify," "I need contact info for bookstores in St. Petersburg, FL."
+    * **Available Fields**: Business name, phone (100%), email (51.3%), website (70.7%), address (99.2%), city/region/zip (99%+), business category (83.6%), social media links (Facebook, Instagram, Twitter, LinkedIn with varying coverage), online review data (Google/Yelp reviews and ratings), and website technology information (CMS, plugins, etc.).
+
+IMPORTANT DATA LIMITATIONS TO UNDERSTAND:
+
+1. **Demographics**: None of our databases contain reliable information about race, ethnicity, religion, sexual orientation, political affiliation, or disability status. Queries for these attributes cannot be fulfilled.
+
+2. **Non-Professional Attributes**: Our databases contain professional information only. We don't have data on personal interests, hobbies, marital status, or income level (though job titles may suggest salary ranges).
+
+3. **Geographically-Limited Business Data**: The local business database (deez_3_v3) only covers US businesses. We cannot provide data on local businesses outside the US.
+
+4. **Technical vs. Contact Information Balance**: The USA and international professional databases have strong LinkedIn and demographic coverage but weaker direct contact data (especially phone). The B2B database has stronger email/phone coverage but less demographic information.
+
+5. **Business-to-Business Focus**: All of our databases are focused on B2B (business-to-business) contacts and not B2C (business-to-consumer). We do not have:
+   * Consumer marketing lists or general population data
+   * Individual consumer demographic or purchase behavior data
+   * Personal lifestyle or household information
+   * Non-professional residential contact information
+
+Based on the user's query:
+
+1. Handle misspellings and partial queries: Assume the user is looking for real data even if their query has typos, is brief, or lacks detail.
+   * Example: "software eginers" should be interpreted as "software engineers" and matched to a professional database.
+   * If only a profession is mentioned without a location (e.g., "accountants"), assume USA unless clearly indicated otherwise.
+   * Common misspellings of professions and locations should be interpreted correctly.
+
+2. Identify the primary intention of the user's query:
+   * Are they seeking individuals (professionals) or businesses?
+   * Is there a geographical focus in the query? If none is explicitly stated, default to USA.
+   * Are they looking specifically for contact information like emails (suggests eap1_new_v2)?
+
+3. Selection rules:
+   * If the query is about professionals in the USA (or no location specified): use \`usa4_new_v2\`
+   * If the query is about professionals outside the USA: use \`otc1_new_v2\`
+   * If the query specifically seeks email contacts or global B2B data: use \`eap1_new_v2\`
+   * If the query is about local businesses or services (restaurants, shops, repair services, etc.): use \`deez_3_v3\`
+   * Default to \`usa4_new_v2\` for ambiguous professional queries without clear location indicators
+
+4. IMPORTANT - Follow-up required cases:
+   In some scenarios, it's better to ask for clarification rather than selecting a potentially incorrect database. Some common scenarios:
+
+   A. International Businesses: If the query is about local businesses in a non-US location (e.g., "plumbers in Taiwan", "restaurants in Singapore"), none of our databases are ideal. The 'deez_3_v3' database only contains US businesses.
+   
+   B. Ambiguous Entity Type: If it's unclear whether the user is looking for professionals or businesses (e.g., "solar contacts").
+   
+   C. Unclear Geography: If the query doesn't specify a location and could be either US or international.
+   
+   D. Complex Query: When the query contains multiple potentially conflicting requirements.
+   
+   E. Attribute Limitations: If a query specifically requests data attributes we don't have (e.g., demographics like race, religion, or personal attributes like income level or marital status).
+   
+   F. B2C Requests: When the query is clearly seeking consumer/individual data rather than business professionals (e.g., "homeowners in Florida," "single mothers in Chicago," "retired veterans"). For these requests, suggest B2B alternatives that might still be valuable, such as professionals in relevant industries or businesses serving those demographics.
+
+   In these cases, instead of returning a database name, return a JSON object with the following structure:
+   {
+     "requiresFollowUp": true,
+     "message": "Brief explanation of the limitation or issue",
+     "options": [
+       {
+         "text": "First suggested option",
+         "value": "Reformulated query for this option",
+         "database": "Suggested database for this option or null if needs further processing"
+       },
+       {
+         "text": "Second suggested option",
+         "value": "Reformulated query for this option",
+         "database": "Suggested database for this option or null if needs further processing"
+       },
+       {
+         "text": "Third suggested option",
+         "value": "Reformulated query for this option",
+         "database": "Suggested database for this option or null if needs further processing"
+       }
+     ]
+   }
+
+Now analyze the user's query and either return a single database name (usa4_new_v2, otc1_new_v2, eap1_new_v2, deez_3_v3) as a simple string OR return the follow-up JSON object for cases requiring clarification.`;
+
 export async function POST(request) {
   if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json({ error: 'OpenAI API key not configured.' }, { status: 500 });
   }
 
   try {
-    const { description } = await request.json();
+    const { description, followUpResponse } = await request.json();
 
     if (!description) {
       return NextResponse.json({ error: 'Description is required.' }, { status: 400 });
     }
 
-    // Step 1: Determine target type (people or businesses)
-    const targetTypeResponse = await determineTargetType(description);
+    // Step 1: Determine database recommendation or follow-up needs
+    let dbRecommendation = null;
+    let requiresFollowUp = false;
+    let followUpOptions = null;
+    let followUpMessage = null;
+
+    // Only perform database selection if there's no follow-up response
+    // If there is a follow-up response, we've already done this step
+    if (!followUpResponse) {
+      const dbSelectionResult = await determineDatabase(description);
+      
+      // Check if the response is a follow-up request or a direct database recommendation
+      if (typeof dbSelectionResult === 'string') {
+        // It's a simple database name
+        dbRecommendation = dbSelectionResult;
+      } else if (dbSelectionResult.requiresFollowUp) {
+        // It requires follow-up
+        requiresFollowUp = true;
+        followUpMessage = dbSelectionResult.message;
+        followUpOptions = dbSelectionResult.options;
+        
+        // Return early with the follow-up request
+        return NextResponse.json({
+          requiresFollowUp,
+          message: followUpMessage,
+          options: followUpOptions,
+          stage: "database-selection"
+        });
+      }
+    }
+
+    // Step 2: Extract information based on database type
+    let extractionResponse = {};
     
-    // Step 2: Based on target type, extract relevant criteria
-    let extractionResponse;
-    if (targetTypeResponse.targetType === "local_businesses") {
+    // For deez_3_v3 (businesses), extract business categories
+    if (dbRecommendation === "deez_3_v3") {
       extractionResponse = await extractBusinessCategories(description);
     } else {
-      // For people, extract job titles, industry keywords, and location in parallel
+      // For all other databases (professionals), extract job titles, industry keywords, and location in parallel
       const [jobTitlesResponse, industryKeywordsResponse, locationResponse] = await Promise.all([
         extractJobTitles(description),
         extractIndustryKeywords(description),
@@ -41,9 +174,6 @@ export async function POST(request) {
       
       // Step 3: Verification steps - we'll skip job title verification but keep others
       const verificationPromises = [];
-      
-      // For job titles: skip database verification, use AI-generated titles directly
-      // We're not running verifyJobTitles() for job titles anymore
       
       // Step 4: If industry keywords were extracted, verify them against the database
       if (extractionResponse.industryKeywords && extractionResponse.industryKeywords.length > 0) {
@@ -63,10 +193,12 @@ export async function POST(request) {
         
         // Combine results
         const combinedResults = {
-          ...targetTypeResponse,
           ...extractionResponse,
           // Set titleMatches to empty array to indicate no database matching was done
-          titleMatches: []
+          titleMatches: [],
+          // Add the database recommendation (but still using USA database)
+          recommendedDatabase: dbRecommendation,
+          actualDatabase: "usa4_new_v2" // We always use USA database regardless of recommendation
         };
         
         // Skip setting jobTitlesVerification since we're not verifying
@@ -95,9 +227,11 @@ export async function POST(request) {
 
     // Combine and return all results with empty titleMatches to indicate no verification
     return NextResponse.json({
-      ...targetTypeResponse,
       ...extractionResponse,
-      titleMatches: []
+      titleMatches: [],
+      // Add the database recommendation (but still using USA database)
+      recommendedDatabase: dbRecommendation,
+      actualDatabase: "usa4_new_v2" // We always use USA database regardless of recommendation
     });
 
   } catch (error) {
@@ -112,63 +246,41 @@ export async function POST(request) {
   }
 }
 
-async function determineTargetType(description) {
-  const targetTypeTools = [{
-    type: "function",
-    function: {
-      name: "determine_target_type",
-      description: "Determines if the user is looking for local businesses or individual people as their target audience.",
-      parameters: {
-        type: "object",
-        properties: {
-          target_type: {
-            type: "string",
-            enum: ["people", "local_businesses"],
-            description: "Whether the target audience consists of individual people or local businesses"
-          },
-          confidence: {
-            type: "number",
-            description: "Confidence level in the classification, from 0.0 to 1.0"
-          }
-        },
-        required: ["target_type", "confidence"],
-      }
-    }
-  }];
+// New function to determine which database to use or if follow-up is needed
+async function determineDatabase(description) {
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1-2025-04-14",
+      messages: [
+        { role: "system", content: DB_SELECTION_PROMPT },
+        { role: "user", content: description }
+      ],
+      max_tokens: 500,
+      temperature: 0,
+    });
 
-  const targetTypeSystemPrompt = `You are an expert assistant that determines whether a user's target audience description refers to individual people (like professionals on LinkedIn) or local businesses (like car dealerships, restaurants, etc.).
-If the description mentions professional roles, job titles, or individuals, classify as "people".
-If the description mentions business establishments, stores, companies, or service providers, classify as "local_businesses".
-If unclear, use your best judgment based on context clues.`;
-  
-  const targetTypeResponse = await openai.chat.completions.create({
-    model: "gpt-4.1-2025-04-14",
-    messages: [
-      { role: "system", content: targetTypeSystemPrompt },
-      { role: "user", content: `Please determine if the following target audience description refers to individual people or local businesses: "${description}"` }
-    ],
-    tools: targetTypeTools,
-    tool_choice: { type: "function", function: { name: "determine_target_type" } },
-  });
-
-  const targetTypeMessage = targetTypeResponse.choices[0].message;
-  if (targetTypeMessage.tool_calls && targetTypeMessage.tool_calls.length > 0) {
-    const toolCall = targetTypeMessage.tool_calls[0];
-    if (toolCall.function.name === "determine_target_type") {
-      try {
-        const args = JSON.parse(toolCall.function.arguments);
-        return {
-          targetType: args.target_type,
-          targetTypeConfidence: args.confidence
-        };
-      } catch (e) {
-        console.error("Error parsing target type function arguments:", e);
-        throw new Error('Failed to parse OpenAI function arguments.');
+    const content = completion.choices[0].message.content.trim();
+    
+    // Try to parse the response as JSON for follow-up cases
+    try {
+      const jsonResponse = JSON.parse(content);
+      
+      // If it's a valid follow-up JSON structure
+      if (jsonResponse.requiresFollowUp && jsonResponse.message && Array.isArray(jsonResponse.options)) {
+        return jsonResponse;
       }
+    } catch (e) {
+      // Not JSON, assume it's a simple database name
+      return content.toLowerCase().trim();
     }
+    
+    // If parsing fails but it's not a simple string either, default to USA database
+    return "usa4_new_v2";
+  } catch (error) {
+    console.error('Error in database selection:', error);
+    // Default to USA database in case of any errors
+    return "usa4_new_v2";
   }
-
-  throw new Error('OpenAI did not return the expected function call.');
 }
 
 async function extractJobTitles(description) {
