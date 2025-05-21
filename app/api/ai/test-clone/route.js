@@ -445,6 +445,11 @@ GUIDELINES:
 7. Generate titles that will return the people the user actually wants - prioritize relevance over quantity
 8. Don't generate irrelevant titles just to reach 10 - quality over quantity
 9. Use proper capitalization and standard job title formatting
+10. IMPORTANT: Return ONLY the job title itself - do NOT append organization types or industry information to the title
+    - INCORRECT: "Owner, Marketing Agency" (don't include the organization type)
+    - CORRECT: "Owner" (just the job title)
+    - INCORRECT: "Software Engineer, Fintech" (don't include the industry)
+    - CORRECT: "Software Engineer" (just the job title)
 
 APPROACH:
 - When a user mentions a specific role, think about:

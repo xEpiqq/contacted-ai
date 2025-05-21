@@ -13,7 +13,6 @@ import {
   ChevronDown,
   ArrowLeft
 } from "lucide-react";
-import NavMenu from '@/app/components/NavMenu';
 import { Combobox } from "@headlessui/react";
 import { ChevronUpDownIcon } from "@heroicons/react/24/solid";
 import { XMarkIcon } from "@heroicons/react/24/outline";
@@ -31,13 +30,16 @@ function SearchForm() {
   const [processingTime, setProcessingTime] = useState(null);
   const processStartTimeRef = useRef(null);
   
+  // State for feedback section
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  
   // State for fixed example queries
   const [exampleQueries] = useState([
     "software engineers in fintech",
     "marketing directors",
     "healthcare professionals in Boston",
-    "data scientists with AI experience",
-    "sales managers at SaaS companies"
+    "data scientists with AI experience"
   ]);
   
   // State for autocomplete
@@ -174,6 +176,10 @@ function SearchForm() {
     setSelectedFollowUpOption(null);
     setRecommendedDatabase(null);
     setActualDatabase("usa4_new_v2");
+    
+    // Reset feedback state
+    setFeedbackText("");
+    setFeedbackSubmitted(false);
     
     // Start the timer
     processStartTimeRef.current = Date.now();
@@ -664,8 +670,6 @@ function SearchForm() {
     <div
       className="w-full max-w-[690px] text-white"
     >
-      <NavMenu />
-      
       <div className="flex flex-col items-center gap-2 mb-4">
         <p className="text-neutral-400 text-sm text-center">
           AI-Powered Audience Targeting
@@ -1605,6 +1609,102 @@ function SearchForm() {
           </div>
         </div>
       )}
+
+      {/* Feedback section - added for prototype */}
+      {apiResults && filters.length > 0 && !feedbackSubmitted && (
+        <div className="mt-8 pt-4 border-t border-neutral-700">
+          <div className="bg-[#252525] p-4 rounded-lg border border-[#404040]">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-md font-medium text-white mb-1">AI Assistant</h4>
+                <p className="text-sm text-neutral-300">Does everything look right with these search filters? I can help refine them if needed.</p>
+              </div>
+            </div>
+            
+            <div className="pl-11">
+              <div className="bg-[#1f1f1f] border border-[#404040] rounded-md p-3 mb-3">
+                <p className="text-xs text-neutral-400 mb-2">Current filters:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {filters.map((f, i) => {
+                    const prefix = i === 0 ? "Where" : f.subop || "AND";
+                    const safeTokens = Array.isArray(f.tokens) ? f.tokens : [];
+                    let desc = "";
+                    if (f.condition === "is empty" || f.condition === "is not empty") {
+                      desc = f.condition;
+                    } else {
+                      desc = `${f.condition} [${safeTokens.join(", ")}]`;
+                    }
+                    return (
+                      <div key={i} className="bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs px-2 py-0.5 rounded-md">
+                        <span>
+                          <strong>{prefix}</strong> {f.column} {desc}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              
+              <input
+                type="text"
+                value={feedbackText}
+                onChange={(e) => setFeedbackText(e.target.value)}
+                placeholder="Type to refine your search or adjust these filters..."
+                className="w-full p-3 bg-[#1f1f1f] border border-[#404040] rounded-md text-white text-sm placeholder:text-neutral-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              
+              <div className="mt-3 flex justify-end gap-2">
+                <button 
+                  className="px-4 py-2 bg-[#333] hover:bg-[#444] text-white text-sm rounded-md border border-[#555]"
+                  onClick={() => setFeedbackSubmitted(true)}
+                >
+                  These Filters Look Good
+                </button>
+                <button 
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-md flex items-center gap-1"
+                  onClick={() => {
+                    if (feedbackText.trim()) {
+                      // Here you would typically submit the feedback to an API
+                      console.log("Feedback submitted:", feedbackText);
+                    }
+                    setFeedbackSubmitted(true);
+                  }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 2L11 13"></path>
+                    <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
+                  </svg>
+                  Send
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback submitted confirmation */}
+      {apiResults && filters.length > 0 && feedbackSubmitted && (
+        <div className="mt-8 pt-4 border-t border-neutral-700">
+          <div className="bg-[#252525] p-4 rounded-lg border border-[#404040]">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="h-8 w-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-md font-medium text-white mb-1">AI Assistant</h4>
+                <p className="text-sm text-neutral-300">Great! I'll use these filters for your search. You can always adjust them later by clicking "Edit Filters" if needed.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1977,12 +2077,40 @@ function formatDatabaseName(dbName) {
 export default function TestClonePage() {
   return (
     <div className="min-h-screen bg-[#181818] flex items-center justify-center p-4">
+      {/* Information Guide on the right side */}
       <Guide 
         isVisible={true}
         defaultOpen={true}
         title="Search Information Guide"
         primaryContent={<SearchGuideContent />}
+        position="right"
       />
+      
+      {/* To-do Guide on the left side */}
+      <Guide 
+        isVisible={true}
+        defaultOpen={true}
+        title="To-do"
+        primaryContent={
+          <div className="space-y-4">
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-md p-3">
+              <p className="text-sm text-yellow-300 font-medium mb-2">Follow-up Flow</p>
+              <p className="text-xs text-neutral-300">
+                If the user has to followup more than 2x with the AI at the bottom then send them to manual mode where they can remove and delete filters or maybe go step by step through job - industry - location.
+              </p>
+            </div>
+            
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-md p-3">
+              <p className="text-sm text-blue-300 font-medium mb-2">Reduce Failure Rate</p>
+              <p className="text-xs text-neutral-300">
+                To reduce failrate you can have AI literally perform a counting operation based on the filters it currently has and then see how many it generates and then try again or have it try 3x sets of queries in parrallel to get the best results.
+              </p>
+            </div>
+          </div>
+        }
+        position="left"
+      />
+      
       <SearchForm />
     </div>
   );
