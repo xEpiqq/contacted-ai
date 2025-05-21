@@ -728,150 +728,150 @@ export default function ManualSearch() {
               <span>Total Records:</span>
               <span className="font-medium">{formatNumber(selectedTable.totalCount)}</span>
             </div>
-            {filters.length > 0 && (
+          {filters.length > 0 && (
               <div className="flex justify-between text-sm">
                 <span>Matching:</span>
                 <span className="font-medium">
-                  {countLoading ? (
-                    <span className="inline-block w-10 bg-[#303030] h-4 rounded animate-pulse" />
-                  ) : (
-                    formatNumber(matchingCount)
-                  )}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-        
+              {countLoading ? (
+                <span className="inline-block w-10 bg-[#303030] h-4 rounded animate-pulse" />
+              ) : (
+                formatNumber(matchingCount)
+              )}
+            </span>
+      </div>
+      )}
+                    </div>
+                        </div>
+
         {/* Filter Section - Always visible */}
         <div className="px-4 py-3 border-b border-[#333333]">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-medium text-sm">Filter Settings</h3>
-          </div>
+                  </div>
           
-          <div className="space-y-4">
-            {pendingFilters.map((rule, index) => (
-              <div
-                key={index}
+              <div className="space-y-4">
+                {pendingFilters.map((rule, index) => (
+                  <div
+                    key={index}
                 className="bg-[#303030] border border-[#404040] p-3 rounded-md"
-              >
+                  >
                 <div className="space-y-3">
-                  {index > 0 && (
-                    <div>
+                      {index > 0 && (
+                        <div>
                       <div className="text-xs text-neutral-400 mb-1">Operator</div>
-                      <select
-                        value={rule.subop}
-                        onChange={(e) => updateLineSubop(index, e.target.value)}
+                          <select
+                            value={rule.subop}
+                            onChange={(e) => updateLineSubop(index, e.target.value)}
                         className="w-full bg-[#252525] border border-[#404040] rounded-md py-1.5 px-2 text-sm text-white"
-                      >
-                        <option value="AND">AND</option>
-                        <option value="OR">OR</option>
-                      </select>
-                    </div>
-                  )}
-                  
-                  <div>
-                    <div className="text-xs text-neutral-400 mb-1">Column</div>
+                          >
+                            <option value="AND">AND</option>
+                            <option value="OR">OR</option>
+                          </select>
+                        </div>
+                      )}
+                      
+                      <div>
+                        <div className="text-xs text-neutral-400 mb-1">Column</div>
                     <Combobox
-                      value={rule.column}
-                      onChange={(val) => updateFilterLine(index, "column", val)}
-                    >
+                          value={rule.column}
+                          onChange={(val) => updateFilterLine(index, "column", val)}
+                        >
                       <div className="relative w-full">
-                        <Combobox.Button
+                            <Combobox.Button
                           className="relative w-full border border-[#404040] bg-[#252525] text-white text-left rounded-md py-1.5 px-3 text-sm"
-                        >
-                          <Combobox.Input
-                            onChange={(e) => {
-                              setSearchQuery(e.target.value);
-                              updateFilterLine(index, "column", e.target.value);
-                            }}
-                            displayValue={(val) => val}
-                            placeholder="Select column..."
-                            className="w-full bg-transparent focus:outline-none"
-                          />
-                          <span className="absolute inset-y-0 right-0 flex items-center pr-2">
-                            <ChevronUpDownIcon
-                              className="h-5 w-5 text-neutral-400"
-                              aria-hidden="true"
-                            />
-                          </span>
-                        </Combobox.Button>
-                        <Combobox.Options
-                          className="absolute z-10 mt-1 w-full bg-[#252525] border border-[#404040] rounded-md max-h-40 overflow-auto"
-                        >
-                          {(!searchQuery
-                            ? availableColumns
-                            : availableColumns.filter((c) =>
-                                c.toLowerCase().includes(searchQuery.toLowerCase())
-                              )
-                          ).map((c) => (
-                            <Combobox.Option
-                              key={c}
-                              value={c}
-                              className={({ active }) =>
-                                `cursor-pointer select-none px-3 py-2 text-sm ${
-                                  active
-                                    ? "bg-green-500/20 text-green-400"
-                                    : "text-white"
-                                }`
-                              }
                             >
-                              {c}
+                              <Combobox.Input
+                                onChange={(e) => {
+                                  setSearchQuery(e.target.value);
+                                  updateFilterLine(index, "column", e.target.value);
+                                }}
+                                displayValue={(val) => val}
+                                placeholder="Select column..."
+                                className="w-full bg-transparent focus:outline-none"
+                              />
+                              <span className="absolute inset-y-0 right-0 flex items-center pr-2">
+                                <ChevronUpDownIcon
+                                  className="h-5 w-5 text-neutral-400"
+                                  aria-hidden="true"
+                                />
+                              </span>
+                        </Combobox.Button>
+                            <Combobox.Options
+                          className="absolute z-10 mt-1 w-full bg-[#252525] border border-[#404040] rounded-md max-h-40 overflow-auto"
+                            >
+                              {(!searchQuery
+                                ? availableColumns
+                                : availableColumns.filter((c) =>
+                                c.toLowerCase().includes(searchQuery.toLowerCase())
+                                  )
+                              ).map((c) => (
+                            <Combobox.Option
+                                  key={c}
+                                  value={c}
+                              className={({ active }) =>
+                                    `cursor-pointer select-none px-3 py-2 text-sm ${
+                                      active
+                                    ? "bg-green-500/20 text-green-400"
+                                        : "text-white"
+                                    }`
+                                  }
+                                >
+                                  {c}
                             </Combobox.Option>
                           ))}
                         </Combobox.Options>
                       </div>
                     </Combobox>
                   </div>
-                
-                  <div>
-                    <div className="text-xs text-neutral-400 mb-1">Condition</div>
-                    <select
-                      value={rule.condition}
-                      onChange={(e) =>
-                        updateFilterLine(index, "condition", e.target.value)
-                      }
+                  
+                      <div>
+                        <div className="text-xs text-neutral-400 mb-1">Condition</div>
+                        <select
+                          value={rule.condition}
+                          onChange={(e) =>
+                            updateFilterLine(index, "condition", e.target.value)
+                          }
                       className="w-full bg-[#252525] border border-[#404040] rounded-md py-1.5 px-2 text-sm text-white"
-                    >
-                      <option value="contains">Contains</option>
-                      <option value="equals">Equals</option>
-                      <option value="is empty">Is Empty</option>
-                      <option value="is not empty">Is Not Empty</option>
-                    </select>
-                  </div>
-                
-                  {(rule.condition === "contains" || rule.condition === "equals") && (
+                        >
+                          <option value="contains">Contains</option>
+                          <option value="equals">Equals</option>
+                          <option value="is empty">Is Empty</option>
+                          <option value="is not empty">Is Not Empty</option>
+                        </select>
+                    </div>
+                    
+                    {(rule.condition === "contains" || rule.condition === "equals") && (
                     <div>
                       <div className="text-xs text-neutral-400 mb-1">Search Terms</div>
                       <TokensInput
-                        tokens={rule.tokens}
-                        setTokens={(arr) => updateLineTokens(index, arr)}
-                        pendingText={rule.pendingText || ""}
-                        setPendingText={(txt) => updateLinePendingText(index, txt)}
-                        tableName={selectedTable.id}
-                        column={rule.column}
+                          tokens={rule.tokens}
+                          setTokens={(arr) => updateLineTokens(index, arr)}
+                          pendingText={rule.pendingText || ""}
+                          setPendingText={(txt) => updateLinePendingText(index, txt)}
+                          tableName={selectedTable.id}
+                          column={rule.column}
                       />
                     </div>
                   )}
-                
-                  <div>
-                    <button 
-                      onClick={() => removeFilterLine(index)}
+                    
+                    <div>
+                      <button 
+                        onClick={() => removeFilterLine(index)}
                       className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-white text-xs rounded-md border border-[#404040] mt-2"
-                    >
-                      Remove Rule
-                    </button>
+                      >
+                        Remove Rule
+                      </button>
                   </div>
+                    </div>
                 </div>
-              </div>
-            ))}
-          
+              ))}
+              
             <div className="flex gap-2">
               <button
                 onClick={addFilterLine}
                 className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-white text-xs rounded-md border border-[#404040] flex items-center gap-1"
               >
-                <span>+</span> Add Rule
+                  <span>+</span> Add Rule
               </button>
               
               <button 
@@ -888,22 +888,22 @@ export default function ManualSearch() {
         <div className="px-4 py-3 border-b border-[#333333] space-y-2">
           <div className="text-xs text-neutral-400 mb-1">Actions</div>
           
-          <button
+              <button 
             onClick={toggleColumnSelector}
             className={`w-full px-3 py-2 rounded-md text-sm flex items-center gap-2 ${showColumnSelector ? 'bg-blue-600/20 text-blue-400 border border-blue-500/20' : 'bg-[#303030] hover:bg-[#404040] border border-[#404040]'}`}
-          >
+              >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-columns"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="12" x2="12" y1="3" y2="21"/></svg>
             <span>Columns</span>
-          </button>
+              </button>
           
-          <button
+              <button 
             onClick={toggleExportSection}
             className={`w-full px-3 py-2 rounded-md text-sm flex items-center gap-2 ${showExportSection ? 'bg-blue-600/20 text-blue-400 border border-blue-500/20' : 'bg-[#303030] hover:bg-[#404040] border border-[#404040]'}`}
-          >
+              >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-download"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
             <span>Export</span>
-          </button>
-        </div>
+              </button>
+                    </div>
         
         {/* Dynamic Content Section */}
         <div className="flex-1 overflow-y-auto">
@@ -922,7 +922,7 @@ export default function ManualSearch() {
                   onChange={(e) => setColumnSearch(e.target.value)}
                   className="w-full bg-[#303030] border border-[#404040] rounded-md px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-green-500"
                 />
-              </div>
+            </div>
               
               <div className="max-h-80 overflow-y-auto space-y-2 mb-4">
                 {filteredAvailableColumns.map((col) => (
@@ -944,7 +944,7 @@ export default function ManualSearch() {
               >
                 Apply Changes
               </button>
-            </div>
+              </div>
           )}
           
           {/* Export Section */}
@@ -961,11 +961,11 @@ export default function ManualSearch() {
                       className="h-full bg-green-500 rounded-full"
                       style={{ width: `${exportProgress}%` }}
                     />
-                  </div>
+              </div>
                   <div className="text-sm text-neutral-400 text-center">
                     {exportProgress}%
+            </div>
                   </div>
-                </div>
               ) : (
                 <>
                   <p className="text-xs text-neutral-400 mb-4">
@@ -985,18 +985,18 @@ export default function ManualSearch() {
                       min="1"
                       className="w-full bg-[#303030] border border-[#404040] rounded-md px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-green-500"
                     />
-                  </div>
+                </div>
                   
                   {exportError && (
                     <div className="mb-4 text-sm text-red-500">{exportError}</div>
                   )}
                   
-                  <button
+                <button
                     onClick={startExport}
                     className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-black font-medium text-xs rounded-md"
-                  >
+                >
                     Start Export
-                  </button>
+                </button>
                 </>
               )}
               
@@ -1130,13 +1130,13 @@ export default function ManualSearch() {
               </span>
             )}
             <div className="flex gap-2">
-              <button
+                <button 
                 onClick={prevPage} 
                 disabled={page === 0}
                 className={`px-3 py-1.5 text-xs rounded-md border ${page === 0 ? 'bg-[#252525] text-neutral-500 border-[#333333] cursor-not-allowed' : 'bg-[#252525] hover:bg-[#303030] text-white border-[#404040]'}`}
-              >
+                >
                 Previous
-              </button>
+                </button>
               <button 
                 onClick={nextPage} 
                 disabled={
@@ -1158,10 +1158,10 @@ export default function ManualSearch() {
               >
                 Next
               </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
       </div>
-    </div>
+      </div>
   );
 }

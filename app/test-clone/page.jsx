@@ -9,11 +9,15 @@ import {
   Table, 
   MoreHorizontal, 
   Chrome, 
-  Gem
+  Gem,
+  ChevronDown,
+  ArrowLeft
 } from "lucide-react";
 import NavMenu from '@/app/components/NavMenu';
 import { Combobox } from "@headlessui/react";
 import { ChevronUpDownIcon } from "@heroicons/react/24/solid";
+import { XMarkIcon } from "@heroicons/react/24/outline";
+import { AnimatePresence, motion } from "framer-motion";
 
 function SearchForm() {
   const [text, setText] = useState("");
@@ -26,6 +30,19 @@ function SearchForm() {
   const [isVerifyingTitles, setIsVerifyingTitles] = useState(false);
   const [processingTime, setProcessingTime] = useState(null);
   const processStartTimeRef = useRef(null);
+  
+  // State for fixed example queries
+  const [exampleQueries] = useState([
+    "software engineers in fintech",
+    "marketing directors",
+    "healthcare professionals in Boston",
+    "data scientists with AI experience",
+    "sales managers at SaaS companies"
+  ]);
+  
+  // State for autocomplete
+  const [autocomplete, setAutocomplete] = useState("");
+  const [isAutocompleting, setIsAutocompleting] = useState(false);
   
   // Added state for search results
   const [searchResults, setSearchResults] = useState([]);
@@ -52,19 +69,94 @@ function SearchForm() {
   const textareaRef = useRef(null);
   const plusButtonRef = useRef(null);
   
+  // Debounce references
+  const autocompleteTimeoutRef = useRef(null);
+  const filterUpdateTimeoutRef = useRef(null);
+  
   useEffect(() => {
     setCanProceed(text.trim().length > 0);
   }, [text]);
 
+  // Fetch autocomplete suggestions
+  const fetchAutocomplete = async (userInput) => {
+    if (!userInput || userInput.length < 3) {
+      setAutocomplete("");
+      return;
+    }
+    
+    try {
+      setIsAutocompleting(true);
+      
+      const response = await fetch('/api/ai/autocomplete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: userInput }),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.completion) {
+        // Only show autocomplete if it starts with the user's input
+        if (data.completion.toLowerCase().startsWith(userInput.toLowerCase())) {
+          setAutocomplete(data.completion);
+        } else {
+          setAutocomplete("");
+        }
+      } else {
+        setAutocomplete("");
+      }
+    } catch (error) {
+      console.error('Autocomplete error:', error);
+      setAutocomplete("");
+    } finally {
+      setIsAutocompleting(false);
+    }
+  };
+  
+  const handleTextChange = (e) => {
+    const newText = e.target.value;
+    setText(newText);
+    setApiResults(null); // Clear previous results when text changes
+    setApiError(null);   // Clear previous errors when text changes
+    
+    // Clear any pending autocomplete timeout
+    if (autocompleteTimeoutRef.current) {
+      clearTimeout(autocompleteTimeoutRef.current);
+    }
+    
+    // Set new timeout (200ms debounce)
+    autocompleteTimeoutRef.current = setTimeout(() => {
+      fetchAutocomplete(newText);
+      autocompleteTimeoutRef.current = null;
+    }, 200);
+  };
+  
   const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // If Tab pressed and we have an autocomplete suggestion, use it
+    if (e.key === 'Tab' && autocomplete) {
+      e.preventDefault();
+      setText(autocomplete);
+      setAutocomplete("");
+    }
+    // Original Enter key handler
+    else if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (canProceed) {
         handleFormSubmit(e);
       }
     }
   };
-
+  
+  // Use an example query
+  const useExample = (example) => {
+    setText(example);
+    
+    // Focus the textarea
+    textareaRef.current?.focus();
+  };
+  
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     if (!canProceed || isLoading) return;
@@ -273,6 +365,31 @@ function SearchForm() {
       }
     }
     
+    // Add additional filters if available
+    if (results.additionalFilters && Array.isArray(results.additionalFilters) && results.additionalFilters.length > 0) {
+      // Only include filters that have valid values (either from validation or original if no validation)
+      results.additionalFilters.forEach(filter => {
+        if (filter.column && 
+            ((filter.validatedValues && filter.validatedValues.length > 0) || 
+             (filter.values && filter.values.length > 0))) {
+          
+          // Use validated values if available, otherwise use original values
+          const valuesToUse = (filter.validatedValues && filter.validatedValues.length > 0) 
+            ? filter.validatedValues 
+            : filter.values;
+          
+          // Map API filter format to UI filter format
+          newFilters.push({
+            column: filter.column,
+            condition: filter.condition || "contains",
+            tokens: valuesToUse,
+            pendingText: "",
+            subop: newFilters.length > 0 ? "AND" : ""
+          });
+        }
+      });
+    }
+    
     return newFilters;
   };
   
@@ -340,9 +457,6 @@ function SearchForm() {
   };
   
   // Add debounce reference for filter application
-  const filterUpdateTimeoutRef = useRef(null);
-  
-  // Function to apply filters with debounce
   const debouncedFilterApplication = (fn) => {
     // Clear any pending timeout
     if (filterUpdateTimeoutRef.current) {
@@ -367,10 +481,19 @@ function SearchForm() {
     return count;
   };
   
-  const handleTextChange = (e) => {
-    setText(e.target.value);
-    setApiResults(null); // Clear previous results when text changes
-    setApiError(null);   // Clear previous errors when text changes
+  const fetchQuickSuggestions = (query) => {
+    // This function is no longer needed but we'll keep a simplified version
+    // for compatibility with the rest of the code
+    setSuggestions(exampleQueries);
+  };
+  
+  // Use a suggestion
+  const useSuggestion = (suggestion) => {
+    setText(suggestion);
+    setSuggestions(exampleQueries); // Reset to example queries
+    
+    // Focus the textarea
+    textareaRef.current?.focus();
   };
 
   useEffect(() => {
@@ -559,17 +682,28 @@ function SearchForm() {
         className="rounded-3xl bg-[#303030] shadow-sm relative"
       >
         <div className="flex flex-col px-4 py-2">
-          <div className="flex items-center flex-wrap gap-2">
-            <textarea
-              ref={textareaRef}
-              rows={1} // Start with 1 row, will auto-grow
-              placeholder="e.g., software engineers in the fintech sector, or marketing managers at Series B startups"
-              value={text}
-              onChange={handleTextChange}
-              onKeyDown={handleKeyDown}
-              className="flex-1 ml-2 resize-none overflow-hidden bg-transparent placeholder:text-neutral-500 text-sm leading-6 outline-none text-white"
-              disabled={isLoading}
-            />
+          <div className="flex items-center flex-wrap gap-2 relative">
+            <div className="flex-1 ml-2 relative">
+              <textarea
+                ref={textareaRef}
+                rows={1} // Start with 1 row, will auto-grow
+                placeholder="People who own a marketing agency in california..."
+                value={text}
+                onChange={handleTextChange}
+                onKeyDown={handleKeyDown}
+                className="w-full resize-none overflow-hidden bg-transparent placeholder:text-neutral-500 text-sm leading-6 outline-none text-white"
+                disabled={isLoading}
+              />
+              
+              {/* Autocomplete suggestion overlay */}
+              {autocomplete && text && autocomplete !== text && (
+                <div className="absolute top-0 left-0 text-sm leading-6 pointer-events-none">
+                  <span className="invisible">{text}</span>
+                  <span className="text-neutral-500">{autocomplete.slice(text.length)}</span>
+                  <span className="ml-1 text-neutral-400 bg-neutral-700/50 px-1 text-xs rounded">Tab</span>
+                </div>
+              )}
+            </div>
             
             <button
               type="submit"
@@ -654,6 +788,59 @@ function SearchForm() {
           </div>
         </div>
       </form>
+      
+      {/* Example Queries Section */}
+      <div className="mt-3 mb-3 bg-[#252525] border border-[#333333] rounded-xl overflow-hidden shadow-lg">
+        <div className="px-3 py-2 bg-[#2a2a2a] border-b border-[#333333] flex justify-between items-center">
+          <div className="text-sm text-neutral-300 font-medium flex items-center gap-2">
+            <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+            </svg>
+            <span>Example Searches</span>
+          </div>
+        </div>
+        <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {exampleQueries.map((suggestion, index) => {
+            // Determine background color based on query complexity
+            let bgColor = "bg-blue-500/10 hover:bg-blue-500/20";
+            let borderColor = "border-blue-500/20";
+            let iconColor = "text-blue-400";
+            
+            if (suggestion.includes(" in ") && suggestion.includes(" at ")) {
+              // Most complex (job + industry + location)
+              bgColor = "bg-purple-500/10 hover:bg-purple-500/20";
+              borderColor = "border-purple-500/20";
+              iconColor = "text-purple-400";
+            } else if (suggestion.includes(" in ") || suggestion.includes(" at ") || suggestion.includes(" with ")) {
+              // Medium complexity (job + industry/location)
+              bgColor = "bg-green-500/10 hover:bg-green-500/20";
+              borderColor = "border-green-500/20";
+              iconColor = "text-green-400";
+            }
+            
+            return (
+              <button
+                key={index}
+                onClick={() => useExample(suggestion)}
+                className={`text-left px-3 py-2 text-sm text-white rounded-md transition-colors flex items-center gap-2 ${bgColor} border ${borderColor}`}
+              >
+                <svg className={`w-4 h-4 ${iconColor} flex-shrink-0`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                </svg>
+                <span>{suggestion}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="px-3 py-2 bg-[#232323] border-t border-[#333333] text-xs text-neutral-400">
+          <p className="flex items-center gap-2">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span>Click any example to use it or press Tab while typing to complete your query</span>
+          </p>
+        </div>
+      </div>
 
       {/* Follow-up UI */}
       {requiresFollowUp && (
@@ -734,6 +921,44 @@ function SearchForm() {
       {apiResults && (
         <div className="mt-6 p-4 bg-[#2b2b2b] border border-[#404040] rounded-lg">
           <h3 className="text-lg font-semibold mb-3 text-green-400">Suggested Criteria:</h3>
+          
+          {/* Additional filters notice - show if we have additional filters beyond the big 3 */}
+          {apiResults.hasAdditionalFilters && apiResults.additionalFilters && apiResults.additionalFilters.length > 0 && (
+            <div className="mb-4 p-3 bg-[#303030] border border-[#404040] rounded-md">
+              <div className="flex items-start gap-2">
+                <svg className="w-5 h-5 text-blue-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <div>
+                  <p className="text-sm text-blue-400 font-medium">Additional filter criteria identified</p>
+                  <p className="text-xs text-neutral-300 mt-1">{apiResults.additionalFiltersMessage || "We identified additional specific criteria beyond job title, industry, and location."}</p>
+                  
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {apiResults.additionalFilters.map((filter, idx) => (
+                      <div 
+                        key={idx} 
+                        className={`px-3 py-1 text-xs rounded-full flex items-center gap-1 ${
+                          filter.matchFound !== false 
+                            ? "bg-purple-600/20 border border-purple-500/30 text-purple-300" 
+                            : "bg-neutral-600/20 border border-neutral-500/30 text-neutral-300"
+                        }`}
+                        title={filter.note || ""}
+                      >
+                        <span>
+                          {filter.column}: {Array.isArray(filter.values) ? filter.values.join(", ") : filter.values}
+                        </span>
+                        {filter.coverage && (
+                          <span className="text-[9px] font-medium bg-black/30 px-1.5 py-0.5 rounded">
+                            {filter.coverage}%
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Display job titles */}
           {apiResults.jobTitles && apiResults.jobTitles.length > 0 && (
@@ -1552,6 +1777,187 @@ function TokensInput({
   );
 }
 
+/**
+ * Guide component for the test clone page, inspired by the existing guide from other areas of the app.
+ */
+function Guide({ 
+  isVisible = true,
+  defaultOpen = true,
+  title = "Search Guide",
+  primaryContent = null,
+  sections = [],
+  width = 320,
+  position = "right"
+}) {
+  const [guideOpen, setGuideOpen] = useState(defaultOpen);
+
+  useEffect(() => {
+    setGuideOpen(defaultOpen);
+  }, [defaultOpen]);
+
+  if (!isVisible) return null;
+
+  return (
+    <div className={`fixed top-24 ${position}-0 bottom-0 w-auto z-50`}>
+      <AnimatePresence>
+        {guideOpen ? (
+          <motion.aside
+            key="guide"
+            initial={{ x: position === "right" ? width : -width, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: position === "right" ? width : -width, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className={`fixed top-24 ${position}-4 max-w-[90vw] bg-[#2b2b2b] border border-[#404040] rounded-2xl shadow-lg text-sm text-neutral-200 z-50 pointer-events-auto overflow-hidden`}
+            style={{ width: width + 'px' }}
+          >
+            <button
+              aria-label="minimize guide"
+              onClick={() => setGuideOpen(false)}
+              className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-[#3a3a3a] text-neutral-400 hover:text-white z-10"
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
+
+            <AnimatePresence mode="wait">
+              <motion.div 
+                key={title}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="p-4 space-y-3"
+              >
+                <h3 className="text-base font-semibold">{title}</h3>
+                
+                {primaryContent}
+                
+                {sections.length > 0 && sections.map((section, index) => (
+                  <div key={index} className="mt-3">
+                    {section.title && <p className="font-medium">{section.title}</p>}
+                    {section.content}
+                  </div>
+                ))}
+              </motion.div>
+            </AnimatePresence>
+          </motion.aside>
+        ) : (
+          <motion.button
+            key="guide-tab"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 25 }}
+            aria-label="open guide"
+            onClick={() => setGuideOpen(true)}
+            className={`fixed top-1/2 ${position === "right" ? "right-2" : "left-2"} -translate-y-1/2 z-50 flex h-8 w-8 items-center justify-center rounded-full bg-[#3a3a3a] text-neutral-400 hover:text-white pointer-events-auto cursor-pointer`}
+          >
+            <ArrowLeft className={`h-4 w-4 ${position === "left" ? "rotate-180" : ""}`} />
+          </motion.button>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * Location and Search Criteria guide content component
+ */
+function SearchGuideContent() {
+  const [showCriteria, setShowCriteria] = useState(false);
+  
+  // These search criteria are extracted from the prompt in the extract-usa4-additional-filters route
+  const searchCriteria = [
+    { name: "Full name", coverage: "100.0%" },
+    { name: "Job title", coverage: "82.7%" },
+    { name: "Emails", coverage: "86.3%" },
+    { name: "Phone numbers", coverage: "36.2%" },
+    { name: "Company Size", coverage: "53.6%" },
+    { name: "Years Experience", coverage: "61.7%" },
+    { name: "Twitter Username", coverage: "3.1%" },
+    { name: "Summary", coverage: "82.9%" },
+    { name: "Sub Role", coverage: "25.2%" },
+    { name: "Street Address", coverage: "23.9%" },
+    { name: "Skills", coverage: "49.9%" },
+    { name: "Region", coverage: "96.3%" },
+    { name: "Gender", coverage: "85.4%" },
+    { name: "Industry", coverage: "89.4%" },
+    { name: "Company Name", coverage: "77.3%" }
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-green-500/10 border border-green-500/20 rounded-md p-3">
+        <p className="text-sm text-green-300 font-medium mb-2">
+          Search Tip: More Criteria = More Targeted But Less Results
+        </p>
+        <div className="space-y-2">
+          <div className="flex items-center">
+            <div className="w-full bg-gradient-to-r from-green-500/20 to-green-500/10 rounded p-1.5 flex justify-between">
+              <span className="text-xs text-white">Job title only</span>
+              <span className="text-xs text-green-300 font-medium">~1.2M results</span>
+            </div>
+          </div>
+          <div className="flex items-center">
+            <div className="w-4/5 bg-gradient-to-r from-green-500/20 to-green-500/10 rounded p-1.5 flex justify-between">
+              <span className="text-xs text-white">Job title + Industry</span>
+              <span className="text-xs text-green-300 font-medium">~250K results</span>
+            </div>
+          </div>
+          <div className="flex items-center">
+            <div className="w-2/5 bg-gradient-to-r from-green-500/20 to-green-500/10 rounded p-1.5 flex justify-between">
+              <span className="text-xs text-white">Job title + Industry + Location</span>
+              <span className="text-xs text-green-300 font-medium">~50K results</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="bg-blue-500/10 border border-blue-500/20 rounded-md p-3">
+        <p className="text-sm text-blue-300">
+          If no location is specified, searches will default to the United States. We currently don't have local business data outside of the United States.
+        </p>
+      </div>
+      
+      <div>
+        <button
+          onClick={() => setShowCriteria(!showCriteria)}
+          className="flex items-center justify-between w-full px-3 py-2 bg-[#3a3a3a] rounded-md hover:bg-[#454545] transition-colors"
+        >
+          <span className="font-medium">Available Search Criteria</span>
+          <ChevronDown className={`h-4 w-4 transition-transform ${showCriteria ? "rotate-180" : ""}`} />
+        </button>
+        
+        {showCriteria && (
+          <div className="mt-2 border border-[#454545] rounded-md p-2 max-h-72 overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="text-left text-neutral-400">
+                <tr>
+                  <th className="p-1 font-normal">Field</th>
+                  <th className="p-1 font-normal">Coverage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {searchCriteria.map((criteria, index) => (
+                  <tr key={index} className={index % 2 === 0 ? "bg-[#2a2a2a]" : ""}>
+                    <td className="p-1">{criteria.name}</td>
+                    <td className="p-1">{criteria.coverage}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      
+      <div className="bg-[#1f1f1f] border border-[#404040] rounded-md p-2 text-[11px] text-neutral-300">
+        <p>
+          <span className="font-medium">Pro tip:</span> Fields with higher coverage percentages will yield more complete results.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // Helper function to display friendly database names
 function formatDatabaseName(dbName) {
   switch(dbName) {
@@ -1571,6 +1977,12 @@ function formatDatabaseName(dbName) {
 export default function TestClonePage() {
   return (
     <div className="min-h-screen bg-[#181818] flex items-center justify-center p-4">
+      <Guide 
+        isVisible={true}
+        defaultOpen={true}
+        title="Search Information Guide"
+        primaryContent={<SearchGuideContent />}
+      />
       <SearchForm />
     </div>
   );

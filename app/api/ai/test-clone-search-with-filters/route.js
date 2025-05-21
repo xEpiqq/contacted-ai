@@ -31,11 +31,23 @@ export async function POST(request) {
       return NextResponse.json({ error: 'At least one valid filter is required.' }, { status: 400 });
     }
     
-    // Process and expand location filters to improve search results
-    const processedFilters = processLocationFilters(validFilters);
+    // Separate standard filters (location) and additional filters
+    const locationFilters = validFilters.filter(filter => 
+      isLocationFilter(filter.column)
+    );
+    
+    const nonLocationFilters = validFilters.filter(filter => 
+      !isLocationFilter(filter.column)
+    );
+    
+    // Process location filters to improve search results
+    const processedLocationFilters = processLocationFilters(locationFilters);
+    
+    // Combine processed location filters with non-location filters
+    const allProcessedFilters = [...processedLocationFilters, ...nonLocationFilters];
     
     // Build elasticsearch query from filters
-    const filterQuery = buildESQueryFromFilters(processedFilters);
+    const filterQuery = buildESQueryFromFilters(allProcessedFilters);
     const esQuery = {
       constant_score: {
         filter: filterQuery
@@ -63,7 +75,7 @@ export async function POST(request) {
     return NextResponse.json({
       results,
       totalCount: count,
-      filters: processedFilters,
+      filters: allProcessedFilters,
       success: true
     });
     
@@ -77,41 +89,41 @@ export async function POST(request) {
 }
 
 /**
+ * Helper function to check if a column is a location-related filter
+ */
+function isLocationFilter(column) {
+  const locationColumns = ["Location", "Locality", "Region", "Metro", "Postal Code"];
+  return locationColumns.includes(column);
+}
+
+/**
  * Process location filters to implement hierarchical location searching
  * This expands single location filters into multiple OR filters across relevant columns
  */
 function processLocationFilters(filters) {
-  const locationColumns = ["Location", "Locality", "Region", "Metro", "Postal Code"];
   const result = [];
   let lastWasLocation = false;
   
   for (let i = 0; i < filters.length; i++) {
     const filter = { ...filters[i] };
     
-    // Check if this is a location-related filter
-    if (locationColumns.includes(filter.column)) {
-      // Get location value (assuming first token for simplicity)
-      if (filter.tokens && filter.tokens.length > 0) {
-        const locationValue = filter.tokens[0].trim();
-        
-        // Skip "United States" as it's redundant for USA database
-        if (locationValue.toLowerCase() === "united states") {
-          continue;
-        }
-        
-        // Expand the single location filter into multiple OR filters for broader coverage
-        const expandedFilters = expandLocationFilter(filter.column, locationValue, lastWasLocation);
-        result.push(...expandedFilters);
-        lastWasLocation = true;
-      } else {
-        // If it's an empty/not empty condition, just add it
-        result.push(filter);
-        lastWasLocation = true;
+    // Get location value (assuming first token for simplicity)
+    if (filter.tokens && filter.tokens.length > 0) {
+      const locationValue = filter.tokens[0].trim();
+      
+      // Skip "United States" as it's redundant for USA database
+      if (locationValue.toLowerCase() === "united states") {
+        continue;
       }
+      
+      // Expand the single location filter into multiple OR filters for broader coverage
+      const expandedFilters = expandLocationFilter(filter.column, locationValue, lastWasLocation);
+      result.push(...expandedFilters);
+      lastWasLocation = true;
     } else {
-      // For non-location filters, just add them as is
+      // If it's an empty/not empty condition, just add it
       result.push(filter);
-      lastWasLocation = false;
+      lastWasLocation = true;
     }
   }
   

@@ -36,15 +36,66 @@ You have access to information about four databases, identified by their interna
 
 IMPORTANT DATA LIMITATIONS TO UNDERSTAND:
 
-1. **Demographics**: None of our databases contain reliable information about race, ethnicity, religion, sexual orientation, political affiliation, or disability status. Queries for these attributes cannot be fulfilled.
+1. **AVAILABLE USA4 DATABASE FIELDS (with coverage percentages)**: We offer the following data categories for filtering and searching:
+   * **Personal Information**: 
+     - Full name (100% coverage)
+     - First Name (96% coverage)
+     - Last Name (96.3% coverage)
+     - Middle Name (5% coverage)
+     - Middle Initial (11.4% coverage)
+     - Gender (85.4% coverage)
+   * **Professional Details**:
+     - Job title (82.7% coverage)
+     - Sub Role (25.2% coverage)
+     - Summary (82.9% coverage)
+     - Job Summary (14.8% coverage)
+     - Industry (89.4% coverage)
+     - Industry 2 (41% coverage)
+     - Skills (49.9% coverage)
+     - Years Experience (61.7% coverage)
+     - Inferred Salary (61.7% coverage)
+     - Start Date (46.6% coverage)
+   * **Company Information**:
+     - Company Name (77.3% coverage)
+     - Company Size (53.6% coverage)
+     - Company Industry (51.3% coverage)
+     - Company Founded (38.9% coverage)
+     - Company Website (42.2% coverage)
+     - Company Linkedin Url (52% coverage)
+     - Company Location data (38-50% coverage across fields)
+   * **Contact Information**:
+     - Emails (86.3% coverage)
+     - Phone numbers (36.2% coverage)
+     - Mobile (10.4% coverage)
+   * **Location Data**:
+     - Location (96% coverage)
+     - Locality (96% coverage)
+     - Region (96.3% coverage)
+     - Metro (81.9% coverage)
+     - Postal Code (21.6% coverage)
+     - Location Geo (92.9% coverage)
+     - Location Country (96.3% coverage)
+     - Location Continent (95.8% coverage)
+   * **Social Media**:
+     - LinkedIn Url (95.4% coverage)
+     - LinkedIn Username (96.3% coverage)
+     - Linkedin Connections (94.2% coverage)
+     - Facebook Username (22.9% coverage)
+     - Facebook Url (22.9% coverage)
+     - Twitter Username (3.1% coverage)
+     - Twitter Url (2.9% coverage)
+     - Github Username (0.8% coverage)
+     - Github Url (1.2% coverage)
+   * **Other**:
+     - Interests (13.7% coverage)
+     - Birth Year (7.5% coverage)
+     - Birth Date (6.2% coverage)
+     - Address Line 2 (1.2% coverage)
+     - Street Address (23.9% coverage)
 
-2. **Non-Professional Attributes**: Our databases contain professional information only. We don't have data on personal interests, hobbies, marital status, or income level (though job titles may suggest salary ranges).
+2. **Geographically-Limited Business Data**: The local business database (deez_3_v3) only covers US businesses. We cannot provide data on local businesses outside the US.
 
-3. **Geographically-Limited Business Data**: The local business database (deez_3_v3) only covers US businesses. We cannot provide data on local businesses outside the US.
-
-4. **Technical vs. Contact Information Balance**: The USA and international professional databases have strong LinkedIn and demographic coverage but weaker direct contact data (especially phone). The B2B database has stronger email/phone coverage but less demographic information.
-
-5. **Business-to-Business Focus**: All of our databases are focused on B2B (business-to-business) contacts and not B2C (business-to-consumer). We do not have:
+3. **Business-to-Business Focus**: All of our databases are focused on B2B (business-to-business) contacts and not B2C (business-to-consumer). We do not have:
    * Consumer marketing lists or general population data
    * Individual consumer demographic or purchase behavior data
    * Personal lifestyle or household information
@@ -61,6 +112,7 @@ Based on the user's query:
    * Are they seeking individuals (professionals) or businesses?
    * Is there a geographical focus in the query? If none is explicitly stated, default to USA.
    * Are they looking specifically for contact information like emails (suggests eap1_new_v2)?
+   * Are they looking for additional criteria like gender, company size, salary range, or experience? (USA database handles these well)
 
 3. Selection rules:
    * If the query is about professionals in the USA (or no location specified): use \`usa4_new_v2\`
@@ -80,7 +132,7 @@ Based on the user's query:
    
    D. Complex Query: When the query contains multiple potentially conflicting requirements.
    
-   E. Attribute Limitations: If a query specifically requests data attributes we don't have (e.g., demographics like race, religion, or personal attributes like income level or marital status).
+   E. Attribute Limitations: If a query specifically requests data attributes we don't have.
    
    F. B2C Requests: When the query is clearly seeking consumer/individual data rather than business professionals (e.g., "homeowners in Florida," "single mothers in Chicago," "retired veterans"). For these requests, suggest B2B alternatives that might still be valuable, such as professionals in relevant industries or businesses serving those demographics.
 
@@ -152,7 +204,15 @@ export async function POST(request) {
       }
     }
 
-    // Step 2: Extract information based on database type
+    // Step 2: Check if the query might contain additional filter criteria (beyond job title, industry, location)
+    // This is an asynchronous call but we'll process it in parallel with other extractions
+    let additionalFiltersPromise = null;
+    if (dbRecommendation === "usa4_new_v2" || !dbRecommendation) {
+      // Only call the additional filters API for USA database (or if we're defaulting to it)
+      additionalFiltersPromise = fetchAdditionalFilters(description);
+    }
+
+    // Step 3: Extract information based on database type
     let extractionResponse = {};
     
     // For deez_3_v3 (businesses), extract business categories
@@ -172,15 +232,15 @@ export async function POST(request) {
         ...locationResponse
       };
       
-      // Step 3: Verification steps - we'll skip job title verification but keep others
+      // Step 4: Verification steps - we'll skip job title verification but keep others
       const verificationPromises = [];
       
-      // Step 4: If industry keywords were extracted, verify them against the database
+      // Step 5: If industry keywords were extracted, verify them against the database
       if (extractionResponse.industryKeywords && extractionResponse.industryKeywords.length > 0) {
         verificationPromises.push(verifyIndustryKeywords(extractionResponse.industryKeywords));
       }
       
-      // Step 5: If location was extracted, verify it against the database
+      // Step 6: If location was extracted, verify it against the database
       if (extractionResponse.locationInfo && 
           extractionResponse.locationInfo.value && 
           extractionResponse.locationInfo.locationType !== "none") {
@@ -221,18 +281,64 @@ export async function POST(request) {
           // The winner in locationMatches is kept as the control (isControl: true)
         }
         
+        // Wait for additional filters to complete if it was requested
+        if (additionalFiltersPromise) {
+          try {
+            const additionalFiltersResponse = await additionalFiltersPromise;
+            
+            // Add additional filters data to the combined results if there are any
+            if (additionalFiltersResponse && additionalFiltersResponse.hasAdditionalFilters) {
+              combinedResults.additionalFilters = additionalFiltersResponse.additionalFilters;
+              combinedResults.additionalFiltersMessage = additionalFiltersResponse.message;
+              combinedResults.hasAdditionalFilters = true;
+            } else {
+              combinedResults.additionalFilters = [];
+              combinedResults.hasAdditionalFilters = false;
+            }
+          } catch (error) {
+            console.error("Error fetching additional filters:", error);
+            combinedResults.additionalFilters = [];
+            combinedResults.hasAdditionalFilters = false;
+            combinedResults.additionalFiltersError = "Failed to process additional filter criteria.";
+          }
+        }
+        
         return NextResponse.json(combinedResults);
       }
     }
 
     // Combine and return all results with empty titleMatches to indicate no verification
-    return NextResponse.json({
+    const finalResponse = {
       ...extractionResponse,
       titleMatches: [],
       // Add the database recommendation (but still using USA database)
       recommendedDatabase: dbRecommendation,
       actualDatabase: "usa4_new_v2" // We always use USA database regardless of recommendation
-    });
+    };
+    
+    // Wait for additional filters to complete if it was requested
+    if (additionalFiltersPromise) {
+      try {
+        const additionalFiltersResponse = await additionalFiltersPromise;
+        
+        // Add additional filters data to the response if there are any
+        if (additionalFiltersResponse && additionalFiltersResponse.hasAdditionalFilters) {
+          finalResponse.additionalFilters = additionalFiltersResponse.additionalFilters;
+          finalResponse.additionalFiltersMessage = additionalFiltersResponse.message;
+          finalResponse.hasAdditionalFilters = true;
+        } else {
+          finalResponse.additionalFilters = [];
+          finalResponse.hasAdditionalFilters = false;
+        }
+      } catch (error) {
+        console.error("Error fetching additional filters:", error);
+        finalResponse.additionalFilters = [];
+        finalResponse.hasAdditionalFilters = false;
+        finalResponse.additionalFiltersError = "Failed to process additional filter criteria.";
+      }
+    }
+    
+    return NextResponse.json(finalResponse);
 
   } catch (error) {
     console.error('API error:', error);
@@ -243,6 +349,30 @@ export async function POST(request) {
       errorMessage = error.message;
     }
     return NextResponse.json({ error: errorMessage }, { status: 500 });
+  }
+}
+
+// Helper function to call the additional filters extraction API
+async function fetchAdditionalFilters(description) {
+  try {
+    // We need to use direct API access since this is a server-side API call
+    const response = await fetch(new URL('/api/ai/extract-usa4-additional-filters', process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ description }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `Request failed with status ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error("Failed to fetch additional filters:", error);
+    throw error;
   }
 }
 
