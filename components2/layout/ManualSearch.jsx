@@ -8,27 +8,31 @@ import { createClient } from "@/utils/supabase/client";
 const DB_TABLES = [
   {
     id: "usa4_new_v2",
-    name: "USA Job DB",
+    name: "USA Professionals",
+    description: "Individual professionals located in the United States",
     defaultColumns: ['Full name', 'Job title', 'Emails', 'Phone numbers'],
     totalCount: 31177584
   },
   {
-    id: "deez_3_v3",
-    name: "USA Local Biz DB",
-    defaultColumns: ['search_keyword', 'name', 'phone', 'email', 'website'],
-    totalCount: 4908756
-  },
-  {
-    id: "pdl4_new_v2",
-    name: "People DB",
-    defaultColumns: ['name', 'linkedin_url', 'email', 'phone_number'],
-    totalCount: 129528353
-  },
-  {
-    id: "otc1_new_v2",
-    name: "World Job DB",
+    id: "otc1_new_v2", 
+    name: "International Professionals",
+    description: "Professionals located outside the United States",
     defaultColumns: ['full_name', 'job_title', 'email', 'phone_number'],
     totalCount: 47352973
+  },
+  {
+    id: "eap1_new_v2",
+    name: "Global B2B Contacts", 
+    description: "Business contacts with emails from around the world",
+    defaultColumns: ['person_name', 'person_title', 'person_email', 'person_phone'],
+    totalCount: 85000000
+  },
+  {
+    id: "deez_3_v3",
+    name: "US Local Businesses",
+    description: "Local business establishments in the United States", 
+    defaultColumns: ['search_keyword', 'name', 'phone', 'email', 'website'],
+    totalCount: 4908756
   }
 ];
 
@@ -251,6 +255,9 @@ export default function ManualSearch() {
   // Store the user's tokens_total for deciding pagination limit
   const [tokensTotal, setTokensTotal] = useState(null);
 
+  // Database counts (can be updated dynamically)
+  const [databaseCounts, setDatabaseCounts] = useState({});
+
   // Handle click outside dropdown
   const tableDropdownRef = useRef(null);
   
@@ -322,6 +329,27 @@ export default function ManualSearch() {
       }
     });
   }, []);
+
+  // Function to fetch database total counts
+  async function fetchDatabaseCount(tableId) {
+    try {
+      const res = await fetch(`/api/people/table-count?table_name=${tableId}`);
+      const data = await res.json();
+      if (res.ok && data.totalCount) {
+        setDatabaseCounts(prev => ({
+          ...prev,
+          [tableId]: data.totalCount
+        }));
+      }
+    } catch (err) {
+      console.error(`Error fetching count for ${tableId}:`, err);
+    }
+  }
+
+  // Get the display count for a table (dynamic if available, fallback to static)
+  function getTableCount(table) {
+    return databaseCounts[table.id] || table.totalCount;
+  }
 
   // ------------------------
   //    On mount or table change
@@ -693,27 +721,49 @@ export default function ManualSearch() {
       <div className="w-72 min-w-[18rem] border-r border-[#333333] flex flex-col bg-[#252525]">
         {/* Database Selector */}
         <div className="px-4 py-3 border-b border-[#333333]">
+          <div className="text-xs text-neutral-400 mb-2">Database Selection</div>
           <div 
             className="flex items-center justify-between cursor-pointer select-none hover:bg-[#303030] p-2 rounded-md"
             onClick={() => setTableDropdownOpen(!tableDropdownOpen)}
             ref={tableDropdownRef}
           >
-            <span className="font-medium">{selectedTable.name}</span>
-            <ChevronDownIcon className="h-5 w-5 text-neutral-400" />
+            <div className="flex-1 min-w-0">
+              <span className="font-medium block truncate">{selectedTable.name}</span>
+              <span className="text-xs text-neutral-400 block truncate">{selectedTable.description}</span>
+            </div>
+            <ChevronDownIcon className="h-5 w-5 text-neutral-400 flex-shrink-0 ml-2" />
           </div>
           
           {tableDropdownOpen && (
-            <div className="mt-1 bg-[#303030] border border-[#404040] rounded-md shadow-lg">
+            <div className="mt-1 bg-[#303030] border border-[#404040] rounded-md shadow-lg max-h-80 overflow-y-auto">
               {DB_TABLES.map((table) => (
                 <div
                   key={table.id}
-                  className="px-3 py-2 hover:bg-[#404040] cursor-pointer"
-                  onClick={() => {
+                  className={`px-3 py-3 hover:bg-[#404040] cursor-pointer border-b border-[#454545] last:border-b-0 ${
+                    selectedTable.id === table.id ? 'bg-[#404040] border-l-2 border-l-green-500' : ''
+                  }`}
+                  onMouseDown={(e) => {
+                    e.preventDefault(); // Prevent losing focus
                     setSelectedTable(table);
                     setTableDropdownOpen(false);
                   }}
                 >
-                  {table.name}
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1 min-w-0 mr-2">
+                      <div className={`font-medium ${selectedTable.id === table.id ? 'text-green-400' : 'text-white'}`}>
+                        {table.name}
+                        {selectedTable.id === table.id && (
+                          <span className="ml-2 text-xs bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">
+                            Selected
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-neutral-400 mt-1">{table.description}</div>
+                    </div>
+                    <div className="text-xs text-neutral-500 whitespace-nowrap">
+                      {formatNumber(getTableCount(table))} records
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -726,7 +776,7 @@ export default function ManualSearch() {
           <div className="space-y-1">
             <div className="flex justify-between text-sm">
               <span>Total Records:</span>
-              <span className="font-medium">{formatNumber(selectedTable.totalCount)}</span>
+              <span className="font-medium">{formatNumber(getTableCount(selectedTable))}</span>
             </div>
           {filters.length > 0 && (
               <div className="flex justify-between text-sm">

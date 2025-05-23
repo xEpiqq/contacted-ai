@@ -1,9 +1,19 @@
-import { OpenAI } from 'openai';
+import { generateObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
 import { NextResponse } from 'next/server';
-import { esClient } from "@/utils/elasticsearch/client";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+// Zod schema for additional filters response
+const AdditionalFiltersSchema = z.object({
+  additionalFilters: z.array(z.object({
+    column: z.string(),
+    condition: z.string(),
+    values: z.array(z.string()),
+    coverage: z.number().optional(),
+    note: z.string().nullable().optional()
+  })),
+  hasAdditionalFilters: z.boolean(),
+  message: z.string()
 });
 
 // Schema information for usa4_new_v2 database with coverage percentages
@@ -105,36 +115,14 @@ Follow these strict guidelines:
 6. Make sure all parameters extracted are found in the database schema provided
 7. For fields with low coverage (<20%), include a warning note about potential limited results
 
-The response should be a JSON object with an "additionalFilters" array containing the identified parameters.
-
-Example response format:
-{
-  "additionalFilters": [
-    {
-      "column": "Gender",
-      "condition": "equals",
-      "values": ["female"],
-      "coverage": 85.4,
-      "note": null
-    },
-    {
-      "column": "Company Size",
-      "condition": "contains",
-      "values": ["11-50", "51-200"],
-      "coverage": 53.6,
-      "note": null
-    }
-  ],
-  "hasAdditionalFilters": true,
-  "message": "Found 2 additional filter criteria beyond job title, industry, and location."
-}
-
 If no additional parameters are identified, return:
 {
   "additionalFilters": [],
   "hasAdditionalFilters": false,
   "message": "No additional filter criteria identified beyond job title, industry, and location."
 }
+
+If additional parameters are found, return them with proper validation and coverage information.
 `;
 
 export async function POST(request) {
@@ -169,153 +157,26 @@ export async function POST(request) {
 
 // Function to extract additional filters beyond job title, industry, and location
 async function extractAdditionalFilters(description) {
-  const messages = [
-    {
-      role: "system",
-      content: `${ADDITIONAL_FILTERS_PROMPT}\n\n${USA4_SCHEMA_INFO}`
-    },
-    {
-      role: "user",
-      content: `Extract additional filter parameters (beyond job title, industry, and location) from this description for searching the USA4 database:\n\n"${description}"`
-    }
-  ];
+  const systemPrompt = `${ADDITIONAL_FILTERS_PROMPT}\n\n${USA4_SCHEMA_INFO}`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4-turbo",
-      messages: messages,
-      temperature: 0.1, // Low temperature for consistent, accurate extractions
-      response_format: { type: "json_object" },
-      max_tokens: 1000
+    const { object } = await generateObject({
+      model: openai('gpt-4o'),
+      schema: AdditionalFiltersSchema,
+      system: systemPrompt,
+      prompt: `Extract additional filter parameters (beyond job title, industry, and location) from this description for searching the USA4 database:\n\n"${description}"`,
+      temperature: 0.1
     });
 
-    // Get the extracted parameters from the AI response
-    const content = response.choices[0].message.content;
-    
-    try {
-      // Parse the JSON response
-      const parsedResponse = JSON.parse(content);
-      
-      // Validate filters against database (for fields with sufficient coverage)
-      if (parsedResponse.additionalFilters && parsedResponse.additionalFilters.length > 0) {
-        const validatedFilters = await validateFiltersWithDatabase(parsedResponse.additionalFilters);
-        parsedResponse.additionalFilters = validatedFilters;
-        
-        // Update the message based on validation results
-        const validFilterCount = validatedFilters.filter(f => f.matchFound).length;
-        if (validFilterCount === 0 && parsedResponse.additionalFilters.length > 0) {
-          parsedResponse.message = "Additional filter criteria were identified, but they may not yield optimal results as exact matches were not found in the database.";
-        } else if (validFilterCount < parsedResponse.additionalFilters.length) {
-          parsedResponse.message = `Found ${validFilterCount} validated additional filter criteria beyond job title, industry, and location. Some criteria may have limited matches.`;
-        }
-      }
-      
-      return parsedResponse;
-    } catch (e) {
-      console.error("Failed to parse AI response:", e);
-      // Return a fallback response
-      return {
-        additionalFilters: [],
-        hasAdditionalFilters: false,
-        message: "Failed to extract additional filter criteria.",
-        error: "Invalid response format from AI service."
-      };
-    }
+    return object;
   } catch (error) {
-    console.error("Error calling OpenAI:", error);
-    throw error;
+    console.error("Error calling AI SDK:", error);
+    // Return a fallback response
+    return {
+      additionalFilters: [],
+      hasAdditionalFilters: false,
+      message: "Failed to extract additional filter criteria.",
+      error: "Invalid response format from AI service."
+    };
   }
-}
-
-// Function to validate extracted filters against the database
-async function validateFiltersWithDatabase(filters) {
-  const validatedFilters = [];
-  
-  for (const filter of filters) {
-    // Skip validation for low coverage fields (<20%) to avoid unnecessary database calls
-    if (filter.coverage < 20) {
-      filter.matchFound = false;
-      filter.validatedValues = [];
-      filter.note = `Field has low coverage (${filter.coverage}%), validation skipped to avoid false negatives.`;
-      validatedFilters.push(filter);
-      continue;
-    }
-    
-    // Map the API filter column name to the Elasticsearch field name
-    const esFieldName = mapColumnToESField(filter.column);
-    
-    if (!esFieldName) {
-      filter.matchFound = false;
-      filter.validatedValues = [];
-      filter.note = "Could not map to a valid database field.";
-      validatedFilters.push(filter);
-      continue;
-    }
-    
-    try {
-      // For each value, check if it exists in the database
-      const validatedValues = [];
-      let matchFound = false;
-      
-      for (const value of filter.values) {
-        // Construct a simple term query to check if the value exists
-        const query = {
-          term: {
-            [esFieldName]: value.toLowerCase() // Lowercase for case-insensitive matching
-          }
-        };
-        
-        // Execute the query
-        const { count } = await esClient.count({
-          index: "usa4_new_v2",
-          query: query
-        });
-        
-        if (count > 0) {
-          validatedValues.push(value);
-          matchFound = true;
-        }
-      }
-      
-      // Update the filter with validation results
-      filter.matchFound = matchFound;
-      filter.validatedValues = validatedValues;
-      
-      if (validatedValues.length === 0) {
-        filter.note = "No matches found in database for the provided values.";
-      } else if (validatedValues.length < filter.values.length) {
-        filter.note = "Some values were not found in the database and were removed.";
-      } else {
-        filter.note = null;
-      }
-      
-      validatedFilters.push(filter);
-      
-    } catch (error) {
-      console.error(`Error validating filter for ${filter.column}:`, error);
-      filter.matchFound = false;
-      filter.validatedValues = [];
-      filter.note = "Database validation failed due to an error.";
-      validatedFilters.push(filter);
-    }
-  }
-  
-  return validatedFilters;
-}
-
-// Helper function to map UI column names to Elasticsearch field names
-function mapColumnToESField(columnName) {
-  // This is a simple mapping; expand as needed based on the actual ES schema
-  const mapping = {
-    "Gender": "gender",
-    "Company Size": "organization_size",
-    "Company Name": "organization_name",
-    "Skills": "skills",
-    "Years Experience": "years_experience",
-    "Inferred Salary": "inferred_salary",
-    "LinkedIn Connections": "linkedin_connections",
-    // Add more mappings as needed
-  };
-  
-  return mapping[columnName] || columnName.toLowerCase().replace(/ /g, '_');
 } 
