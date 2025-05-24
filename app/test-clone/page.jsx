@@ -397,17 +397,20 @@ function SearchForm() {
             {/* Compact display for all extracted data */}
             <div className="space-y-2">
               
-              {/* Job Titles - Compact List */}
-              {apiResults.jobTitles && apiResults.jobTitles.length > 0 && (
+              {/* Job Titles / Business Types - Compact List */}
+              {((apiResults.jobTitles && apiResults.jobTitles.length > 0) || 
+                (apiResults.businessTypes && apiResults.businessTypes.length > 0)) && (
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium text-neutral-300">Job Titles:</span>
+                  <span className="text-sm font-medium text-neutral-300">
+                    {actualDatabase === "deez_3_v3" ? "Business Types:" : "Job Titles:"}
+                  </span>
                   <div className="flex flex-wrap gap-1">
-                    {apiResults.jobTitles.map((title, index) => (
+                    {(actualDatabase === "deez_3_v3" ? apiResults.businessTypes : apiResults.jobTitles)?.map((item, index) => (
                       <span 
                         key={index}
                         className="px-2 py-1 text-xs rounded bg-blue-600/20 border border-blue-500/30 text-blue-300"
                       >
-                        {title}
+                        {item}
                       </span>
                     ))}
                   </div>
@@ -423,8 +426,8 @@ function SearchForm() {
                 </div>
               )}
 
-              {/* Industry Keywords - Compact List */}
-              {apiResults.industryKeywords && apiResults.industryKeywords.length > 0 && (
+              {/* Industry Keywords - Compact List (skip for DEEZ since business types are shown above) */}
+              {actualDatabase !== "deez_3_v3" && apiResults.industryKeywords && apiResults.industryKeywords.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium text-neutral-300">Industry:</span>
                   <div className="flex flex-wrap gap-1">
@@ -488,8 +491,9 @@ function SearchForm() {
               )}
 
               {/* No results message */}
-              {(!apiResults.jobTitles || apiResults.jobTitles.length === 0) && 
-              (!apiResults.industryKeywords || apiResults.industryKeywords.length === 0) && 
+              {((actualDatabase === "deez_3_v3" && (!apiResults.businessTypes || apiResults.businessTypes.length === 0)) ||
+                (actualDatabase !== "deez_3_v3" && (!apiResults.jobTitles || apiResults.jobTitles.length === 0))) && 
+              (actualDatabase === "deez_3_v3" || (!apiResults.industryKeywords || apiResults.industryKeywords.length === 0)) && 
               (!apiResults.locationInfo || !apiResults.locationInfo.hasLocation) &&
               (!apiResults.hasAdditionalFilters) && (
                 <p className="text-neutral-400 text-sm">No specific criteria were extracted. Try refining your description.</p>

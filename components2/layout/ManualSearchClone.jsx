@@ -31,7 +31,7 @@ const DB_TABLES = [
     id: "deez_3_v3",
     name: "US Local Businesses",
     description: "Local business establishments in the United States", 
-    defaultColumns: ['search_keyword', 'name', 'phone', 'email', 'website'],
+    defaultColumns: ['name', 'search_keyword', 'phone', 'email', 'city'],
     totalCount: 4908756
   }
 ];
@@ -208,7 +208,8 @@ function TokensInput({
 export default function ManualSearchClone({ 
   aiResults = null, 
   recommendedDatabase = null,
-  className = "" 
+  className = "",
+  onResultsCountChange = null
 }) {
   // Table selection state
   const [selectedTable, setSelectedTable] = useState(() => {
@@ -272,6 +273,13 @@ export default function ManualSearchClone({
   // Handle click outside dropdown
   const tableDropdownRef = useRef(null);
   
+  // Notify parent of results count changes
+  useEffect(() => {
+    if (onResultsCountChange) {
+      onResultsCountChange(matchingCount);
+    }
+  }, [matchingCount, onResultsCountChange]);
+
   // Function to show filter section and initialize with empty filter if needed
   function toggleFilterSection() {
     if (!showFilterSection && pendingFilters.length === 0) {
@@ -343,6 +351,10 @@ export default function ManualSearchClone({
 
   // Function to convert AI results to filter format
   function convertAIResultsToFilters(aiData) {
+    console.log("=== convertAIResultsToFilters DEBUG ===");
+    console.log("selectedTable.id:", selectedTable.id);
+    console.log("aiData:", aiData);
+    
     const newFilters = [];
     
     // Define column mappings for each database
@@ -371,8 +383,8 @@ export default function ManualSearchClone({
         case "deez_3_v3":
           return {
             jobTitle: null, // Local businesses don't have individual job titles
-            industry: "search_keyword", // Could map industry to search keywords
-            location: null // Would need to determine location fields for businesses
+            industry: "search_keyword", // Map business types to search_keyword field
+            location: "city" // Map location to city field
           };
         default:
           return {
@@ -384,20 +396,46 @@ export default function ManualSearchClone({
     };
     
     const columnMap = getColumnMappings(selectedTable.id);
+    console.log("columnMap:", columnMap);
     
-    // Job Titles
-    if (aiData.jobTitles && aiData.jobTitles.length > 0 && columnMap.jobTitle) {
-      newFilters.push({
-        column: columnMap.jobTitle,
-        condition: "contains",
-        tokens: aiData.jobTitles,
-        pendingText: "",
-        subop: newFilters.length === 0 ? "" : "AND"
-      });
+    // Job Titles / Business Types
+    if (selectedTable.id === "deez_3_v3") {
+      console.log("Processing DEEZ business types...");
+      console.log("aiData.businessTypes:", aiData.businessTypes);
+      console.log("columnMap.industry:", columnMap.industry);
+      
+      // For local businesses, use businessTypes instead of jobTitles
+      if (aiData.businessTypes && aiData.businessTypes.length > 0 && columnMap.industry) {
+        console.log("Adding business types filter with tokens:", aiData.businessTypes);
+        newFilters.push({
+          column: columnMap.industry,
+          condition: "contains",
+          tokens: aiData.businessTypes,
+          pendingText: "",
+          subop: newFilters.length === 0 ? "" : "AND"
+        });
+      } else {
+        console.log("Not adding business types filter. Conditions:", {
+          hasBusinessTypes: !!(aiData.businessTypes && aiData.businessTypes.length > 0),
+          hasIndustryColumn: !!columnMap.industry,
+          businessTypesLength: aiData.businessTypes?.length || 0
+        });
+      }
+    } else {
+      // For professional databases, use jobTitles
+      if (aiData.jobTitles && aiData.jobTitles.length > 0 && columnMap.jobTitle) {
+        newFilters.push({
+          column: columnMap.jobTitle,
+          condition: "contains",
+          tokens: aiData.jobTitles,
+          pendingText: "",
+          subop: newFilters.length === 0 ? "" : "AND"
+        });
+      }
     }
     
-    // Industry Keywords  
-    if (aiData.industryKeywords && aiData.industryKeywords.length > 0 && columnMap.industry) {
+    // Industry Keywords (skip for DEEZ since business types are handled above)
+    if (selectedTable.id !== "deez_3_v3" && aiData.industryKeywords && aiData.industryKeywords.length > 0 && columnMap.industry) {
       newFilters.push({
         column: columnMap.industry,
         condition: "contains", 
@@ -412,8 +450,32 @@ export default function ManualSearchClone({
       const locationTokens = [];
       const loc = aiData.locationInfo.components;
       
-      // For EAP1, we might want to be more specific about which location component to use
-      if (selectedTable.id === "eap1_new_v2") {
+      if (selectedTable.id === "deez_3_v3") {
+        // For DEEZ (local businesses), prioritize city since that's what we map to
+        if (loc.city) locationTokens.push(loc.city);
+        
+        // Also add region/state as additional filters if available
+        if (loc.state || loc.region) {
+          newFilters.push({
+            column: "region",
+            condition: "contains",
+            tokens: [loc.state || loc.region],
+            pendingText: "",
+            subop: newFilters.length === 0 ? "" : "AND"
+          });
+        }
+        
+        // Add ZIP code as additional filter if available
+        if (loc.zip) {
+          newFilters.push({
+            column: "zip",
+            condition: "contains",
+            tokens: [loc.zip],
+            pendingText: "",
+            subop: newFilters.length === 0 ? "" : "AND"
+          });
+        }
+      } else if (selectedTable.id === "eap1_new_v2") {
         // For EAP1, prioritize state/country over city
         if (loc.state) locationTokens.push(loc.state);
         if (loc.country) locationTokens.push(loc.country);
@@ -521,7 +583,11 @@ export default function ManualSearchClone({
   // Initialize filters from AI results when component mounts or aiResults change
   useEffect(() => {
     if (aiResults && userSettingsLoaded && availableColumns.length > 0) {
+      console.log("=== FILTER VALIDATION DEBUG ===");
+      console.log("availableColumns:", availableColumns);
+      
       const aiFilters = convertAIResultsToFilters(aiResults);
+      console.log("aiFilters before validation:", aiFilters);
       
       // Validate that all AI-generated filter columns exist in available columns
       const validatedFilters = aiFilters.filter(filter => {
@@ -529,9 +595,13 @@ export default function ManualSearchClone({
         const columnExists = availableColumns.includes(filter.column);
         if (!columnExists) {
           console.warn(`AI-generated filter column "${filter.column}" not found in available columns for ${selectedTable.id}`);
+        } else {
+          console.log(`✓ Column "${filter.column}" found in available columns`);
         }
         return columnExists;
       });
+      
+      console.log("validatedFilters after validation:", validatedFilters);
       
       // If no valid filters remain, add an empty one
       if (validatedFilters.length === 0) {
@@ -919,9 +989,9 @@ export default function ManualSearchClone({
         };
       case "deez_3_v3":
         return {
-          jobTitle: "Not applicable",
-          industry: "search_keyword",
-          location: "Not available",
+          jobTitle: "Not applicable (businesses)",
+          industry: "search_keyword (100% coverage)",
+          location: "city (99.6% coverage)",
           dbName: "US Local Businesses"
         };
       default:
@@ -939,96 +1009,11 @@ export default function ManualSearchClone({
   // ------------------------
   return (
     <div className={`bg-[#1a1a1a] text-white ${className}`}>
-      {/* AI Results Summary - moved outside of flex layout */}
-      {aiResults && (
-        <div className="mb-6 p-4 bg-green-500/10 border border-green-500/20 rounded-md">
-          <div className="flex items-center gap-2 mb-3">
-            <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <span className="text-lg text-green-300 font-semibold">AI-Generated Filters Applied</span>
-          </div>
-          <p className="text-sm text-neutral-300 mb-4">
-            The search filters below have been automatically populated based on your AI query results using {getColumnMappingInfo(selectedTable.id).dbName} database structure.
-          </p>
-          
-          {/* Database Column Mapping Info */}
-          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-md">
-            <div className="text-blue-300 font-medium mb-2">Column Mapping for {selectedTable.name}:</div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-neutral-300">
-              <div className="flex items-center gap-2">
-                <span className="text-blue-400 font-medium">Job Titles:</span> 
-                <span className="font-mono text-xs bg-[#2a2a2a] px-2 py-1 rounded">{getColumnMappingInfo(selectedTable.id).jobTitle}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-purple-400 font-medium">Industry:</span> 
-                <span className="font-mono text-xs bg-[#2a2a2a] px-2 py-1 rounded">{getColumnMappingInfo(selectedTable.id).industry}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-green-400 font-medium">Location:</span> 
-                <span className="font-mono text-xs bg-[#2a2a2a] px-2 py-1 rounded">{getColumnMappingInfo(selectedTable.id).location}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Main Search Interface */}
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Left Sidebar - converted to top section on mobile */}
         <div className="lg:w-80 flex-shrink-0">
           <div className="bg-[#252525] border border-[#333333] rounded-lg overflow-hidden">
-            {/* Database Selector */}
-            <div className="px-4 py-4 border-b border-[#333333]">
-              <div className="text-xs text-neutral-400 mb-3 uppercase tracking-wide">Database Selection</div>
-              <div 
-                className="flex items-center justify-between cursor-pointer select-none hover:bg-[#303030] p-3 rounded-md border border-[#404040]"
-                onClick={() => setTableDropdownOpen(!tableDropdownOpen)}
-                ref={tableDropdownRef}
-              >
-                <div className="flex-1 min-w-0">
-                  <span className="font-medium block truncate text-white">{selectedTable.name}</span>
-                  <span className="text-xs text-neutral-400 block truncate mt-1">{selectedTable.description}</span>
-                </div>
-                <ChevronDownIcon className="h-5 w-5 text-neutral-400 flex-shrink-0 ml-2" />
-              </div>
-              
-              {tableDropdownOpen && (
-                <div className="mt-2 bg-[#303030] border border-[#404040] rounded-md shadow-lg max-h-80 overflow-y-auto">
-                  {DB_TABLES.map((table) => (
-                    <div
-                      key={table.id}
-                      className={`px-4 py-3 hover:bg-[#404040] cursor-pointer border-b border-[#454545] last:border-b-0 ${
-                        selectedTable.id === table.id ? 'bg-[#404040] border-l-2 border-l-green-500' : ''
-                      }`}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        setSelectedTable(table);
-                        setTableDropdownOpen(false);
-                      }}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1 min-w-0 mr-3">
-                          <div className={`font-medium ${selectedTable.id === table.id ? 'text-green-400' : 'text-white'}`}>
-                            {table.name}
-                            {selectedTable.id === table.id && (
-                              <span className="ml-2 text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full">
-                                Selected
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-neutral-400 mt-1">{table.description}</div>
-                        </div>
-                        <div className="text-xs text-neutral-500 whitespace-nowrap">
-                          {formatNumber(getTableCount(table))} records
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            
             {/* Database Stats */}
             <div className="px-4 py-4 border-b border-[#333333]">
               <div className="text-xs text-neutral-400 mb-3 uppercase tracking-wide">Database Info</div>

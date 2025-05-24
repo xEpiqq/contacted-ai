@@ -55,10 +55,12 @@ export async function POST(request) {
         });
       
       case "deez_3_v3":
-        // TODO: Create local businesses flow
-        return NextResponse.json({ 
-          error: 'Local businesses flow not yet implemented.' 
-        }, { status: 501 });
+        // Use the local businesses route for DEEZ database
+        return await callFlow("/api/ai/local-businesses", { 
+          description, 
+          database: dbRecommendation,
+          recommendedDatabase: dbRecommendation 
+        });
       
       default:
         // Default to USA professionals if no specific database recommendation
@@ -93,8 +95,24 @@ async function callFlow(flowPath, data) {
     });
     
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || `Flow request failed with status ${response.status}`);
+      let errorMessage = `Flow request failed with status ${response.status}`;
+      
+      // Try to parse as JSON, but handle HTML error pages gracefully
+      try {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const error = await response.json();
+          errorMessage = error.error || errorMessage;
+        } else {
+          // If it's not JSON (like an HTML error page), use status text
+          errorMessage = `${response.status} ${response.statusText}`;
+        }
+      } catch (parseError) {
+        // If JSON parsing fails, use the status message
+        console.error(`Failed to parse error response from ${flowPath}:`, parseError);
+      }
+      
+      throw new Error(errorMessage);
     }
     
     const result = await response.json();

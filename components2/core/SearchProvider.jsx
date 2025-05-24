@@ -9,8 +9,6 @@ import ManualSearch from "../layout/ManualSearch";
 import CreditsScreen from "../layout/CreditsScreen";
 import Guide from "../layout/Guide";
 import SearchStepOne, { closestType } from "../pages/SearchStepOne";
-import SearchStepTwo from "../pages/SearchStepTwo";
-import SearchStepThree from "../pages/SearchStepThree";
 import SearchStepFour from "../pages/SearchStepFour";
 import EnrichmentDrawer from "../layout/EnrichmentDrawer";
 import ExportsDrawer from "../layout/ExportsDrawer";
@@ -62,6 +60,11 @@ function SearchApp() {
   const [exactMatch, setExactMatch] = useState(false);
   const [resultsLoading, setResultsLoading] = useState(false);
   
+  // AI Status tracking state
+  const [aiStatus, setAiStatus] = useState("Search");
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [resultsCount, setResultsCount] = useState(0);
+  
   // Guide state
   const [guideOpen, setGuideOpen] = useState(false);
   
@@ -76,6 +79,20 @@ function SearchApp() {
      )) || 
     (currentStep === 2 && selectedIndustries.length > 0);
   const canProceed = hasText || hasBadges;
+  
+  // Update AI status based on current state
+  useEffect(() => {
+    if (isAiProcessing) {
+      // Status will be set to "Thinking..." during processing
+      return;
+    }
+    
+    if (resultsCount > 0) {
+      setAiStatus(`${resultsCount.toLocaleString()} results`);
+    } else {
+      setAiStatus("Search");
+    }
+  }, [isAiProcessing, resultsCount]);
 
   // Functions for search flow
   const proceedStep0 = (inputString) => {
@@ -360,45 +377,27 @@ function SearchApp() {
     <>
       <div>
         <p className="font-medium">
-          1. Multiple job titles? use commas
+          1. People
         </p>
-        <p className="text-neutral-400 text-xs mt-0.5 italic">
-          ceo, owner, founder
-        </p>
+        <div className="bg-[#1f1f1f] border border-[#404040] rounded-md p-2 text-[11px] text-neutral-300 mt-2">
+          <p>
+            <code className="px-1 py-0.5 bg-[#2c2c2c] rounded">
+              software engineers in San Francisco
+            </code>
+          </p>
+        </div>
       </div>
 
       <div>
         <p className="font-medium">
-          2. Want an exact match? use quotes
+          2. Local businesses
         </p>
 
         <div className="bg-[#1f1f1f] border border-[#404040] rounded-md p-2 text-[11px] text-neutral-300">
           <p>
-            type{" "}
             <code className="px-1 py-0.5 bg-[#2c2c2c] rounded">
-              ceo
-            </code>{" "}
-            (no quotes) and you might find a man whose title is{" "}
-            <code className="px-1 py-0.5 bg-[#2c2c2c] rounded">
-              'best ceo ever'
+              restaurants in downtown Seattle
             </code>
-          </p>
-        </div>
-        <div className="mt-2 space-y-1">
-          <div className="bg-[#1f1f1f] border border-[#404040] rounded-md p-2 text-[11px] text-neutral-300">
-            <p>
-              type{" "}
-              <code className="px-1 py-0.5 bg-[#2c2c2c] rounded">
-                "ceo"
-              </code>{" "}
-              and every person will have the exact title of{" "}
-              <code className="px-1 py-0.5 bg-[#2c2c2c] rounded">
-                "ceo"
-              </code>
-            </p>
-          </div>
-          <p className="text-neutral-400 text-xs mt-2 italic">
-            "ceo", "owner", "founder" is allowed
           </p>
         </div>
       </div>
@@ -547,7 +546,7 @@ function SearchApp() {
   const getGuideContent = () => {
     if (currentStep === 0) {
       return {
-        title: "Search Type Guide",
+        title: "Guide",
         content: <Step1GuideContent />
       };
     } else if (currentStep === 1) {
@@ -592,7 +591,10 @@ function SearchApp() {
       setText,
       canProceed,
       handleBack,
-      handleSubmit
+      handleSubmit,
+      onAiStatusChange: setAiStatus,
+      onAiProcessingChange: setIsAiProcessing,
+      onResultsCountChange: setResultsCount
     };
 
     switch (currentStep) {
@@ -602,26 +604,14 @@ function SearchApp() {
           proceedStep0={proceedStep0}
         />;
       case 1:
-        return <SearchStepTwo 
+        return <SearchStepOne 
           {...commonProps}
-          answerType={answerType}
-          brainstorm={brainstorm}
-          handleBrainstormToggle={handleBrainstormToggle}
-          selectedExamples={selectedExamples}
-          brainstormExamples={brainstormExamples}
-          handleExampleClick={handleExampleClick}
-          handleBadgeRemove={handleBadgeRemove}
-          showExamples={showExamples}
-          setShowExamples={setShowExamples}
+          proceedStep0={proceedStep0}
         />;
       case 2:
-        return <SearchStepThree 
+        return <SearchStepOne 
           {...commonProps}
-          selectedIndustries={selectedIndustries}
-          handleExampleClick={handleExampleClick}
-          handleBadgeRemove={handleBadgeRemove}
-          showIndustryExamples={showIndustryExamples}
-          setShowIndustryExamples={setShowIndustryExamples}
+          proceedStep0={proceedStep0}
         />;
       case 3:
         return <SearchStepFour 
@@ -658,30 +648,27 @@ function SearchApp() {
       
       {/* UI overlay elements that don't affect layout */}
       <div className="absolute top-0 right-0 bottom-0 left-0 pointer-events-none">
-        {/* Step Badges - implemented directly with context access */}
+        {/* AI Status Badge - single badge showing current status */}
         {!manualMode && currentStep < 3 && (
-          <div className="fixed top-20 left-4 flex flex-col gap-2 z-10 pointer-events-auto">
-            {[1, 2, 3].map((step) => (
-              <motion.button
-                key={step}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => {
-                  // Only allow navigation to completed steps
-                  if (step <= currentStep) {
-                    setCurrentStep(step - 1);
-                  }
-                }}
-                className={`px-3 py-1 rounded-full text-sm ${
-                  step <= currentStep
-                    ? "bg-green-500/20 text-green-700 cursor-pointer hover:bg-green-500/30"
-                    : "bg-gray-500/20 text-gray-500 cursor-not-allowed"
-                }`}
-                disabled={step > currentStep}
-              >
-                Step {step}
-              </motion.button>
-            ))}
+          <div className="fixed top-20 left-4 z-10 pointer-events-auto">
+            {/* AI Status Badge */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className={`px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 ${
+                isAiProcessing
+                  ? "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                  : resultsCount > 0
+                  ? "bg-green-500/20 text-green-300 border border-green-500/30"
+                  : "bg-neutral-500/20 text-neutral-400 border border-neutral-500/30"
+              }`}
+            >
+              {isAiProcessing && (
+                <div className="w-3 h-3 border-2 border-t-transparent border-blue-300 rounded-full animate-spin"></div>
+              )}
+              <span>{aiStatus}</span>
+            </motion.div>
           </div>
         )}
       </div>
