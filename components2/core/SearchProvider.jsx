@@ -9,7 +9,6 @@ import ManualSearch from "../layout/ManualSearch";
 import CreditsScreen from "../layout/CreditsScreen";
 import Guide from "../layout/Guide";
 import SearchStepOne, { closestType } from "../pages/SearchStepOne";
-import SearchStepFour from "../pages/SearchStepFour";
 import EnrichmentDrawer from "../layout/EnrichmentDrawer";
 import ExportsDrawer from "../layout/ExportsDrawer";
 import Toasts from "@/components/toasts";
@@ -614,15 +613,9 @@ function SearchApp() {
           proceedStep0={proceedStep0}
         />;
       case 3:
-        return <SearchStepFour 
-          handleResetSearch={handleResetSearch}
-          answerType={answerType}
-          searchFilters={searchFilters}
-          searchResults={searchResults}
-          totalResults={totalResults}
-          searchLimit={searchLimit}
-          handleBack={handleBack}
-          onReset={handleResetSearch}
+        return <SearchStepOne 
+          {...commonProps}
+          proceedStep0={proceedStep0}
         />;
       default:
         return <SearchStepOne 
