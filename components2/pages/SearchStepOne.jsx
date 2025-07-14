@@ -137,7 +137,7 @@ const { setExportsDrawerOpen, setDrawerOpen, setCreditsScreenOpen, isExtensionLo
   return (
     <>
       {apiResults ? (
-        <div className="p-4 w-full max-w-7xl mx-auto">
+        <div className="fixed inset-0 p-4 pt-20 overflow-auto bg-[#1a1a1a]">
           <button
             onClick={() => setApiResults(null)}
             className="mb-4 px-4 py-2 bg-neutral-700 text-white rounded"

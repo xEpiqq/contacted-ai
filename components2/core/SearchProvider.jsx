@@ -8,7 +8,7 @@ import Navbar from "../layout/Navbar";
 import ManualSearch from "../layout/ManualSearch";
 import CreditsScreen from "../layout/CreditsScreen";
 import Guide from "../layout/Guide";
-import SearchStepOne, { closestType } from "../pages/SearchStepOne";
+import SearchStepOne from "../pages/SearchStepOne";
 import EnrichmentDrawer from "../layout/EnrichmentDrawer";
 import ExportsDrawer from "../layout/ExportsDrawer";
 import Toasts from "@/components/toasts";
@@ -93,15 +93,8 @@ function SearchApp() {
     }
   }, [isAiProcessing, resultsCount]);
 
-  // Functions for search flow
-  const proceedStep0 = (inputString) => {
-    const type = closestType(inputString);
-    setAnswerType(type);
-    setCurrentStep(1);
-    setText("");
-    setShowExamples(true);
-    setGuideOpen(true);
-  };
+  // proceedStep0 no longer needed; kept as placeholder for compatibility
+  const proceedStep0 = () => {};
 
   // Handle text submission 
   const handleSubmit = (step) => {
@@ -241,118 +234,9 @@ function SearchApp() {
     // Update search filters
     setSearchFilters(newFilters);
     
-    // Mock search results
-    setTimeout(() => {
-      setSearchResults([
-        {
-          "Full name": "John Doe",
-          "Job title": "Software Engineer",
-          "Company": "Tech Co",
-          "Emails": "john.doe@techco.com",
-          "Phone numbers": "555-123-4567"
-        },
-        {
-          "Full name": "Jane Smith",
-          "Job title": "Marketing Manager",
-          "Company": "Brand Inc",
-          "Emails": "jsmith@brandinc.net",
-          "Phone numbers": "555-987-6543"
-        },
-        {
-          "Full name": "Alex Johnson",
-          "Job title": "Product Manager",
-          "Company": "Innovation LLC",
-          "Emails": "ajohnson@innovation.co",
-          "Phone numbers": "555-456-7890"
-        },
-        {
-          "Full name": "Emily Williams",
-          "Job title": "UX Designer",
-          "Company": "Design Studio",
-          "Emails": "emily.w@designstudio.io",
-          "Phone numbers": "555-234-5678"
-        },
-        {
-          "Full name": "Michael Brown",
-          "Job title": "Sales Director",
-          "Company": "Growth Partners",
-          "Emails": "mbrown@growthpartners.com",
-          "Phone numbers": "555-345-6789"
-        },
-        {
-          "Full name": "Sarah Miller",
-          "Job title": "Content Strategist",
-          "Company": "Media Solutions",
-          "Emails": "sarah@mediasolutions.com",
-          "Phone numbers": "555-456-7890"
-        },
-        {
-          "Full name": "David Wilson",
-          "Job title": "CTO",
-          "Company": "Innovative Tech",
-          "Emails": "david@innovativetech.co",
-          "Phone numbers": "555-567-8901"
-        },
-        {
-          "Full name": "Jennifer Taylor",
-          "Job title": "HR Manager",
-          "Company": "Global Enterprises",
-          "Emails": "jtaylor@globalent.com",
-          "Phone numbers": "555-678-9012"
-        },
-        {
-          "Full name": "Robert Garcia",
-          "Job title": "Data Scientist",
-          "Company": "Analytics Pro",
-          "Emails": "robert@analyticspro.ai",
-          "Phone numbers": "555-789-0123"
-        },
-        {
-          "Full name": "Lisa Martinez",
-          "Job title": "Operations Manager",
-          "Company": "Logistics Plus",
-          "Emails": "lmartinez@logisticsplus.com",
-          "Phone numbers": "555-890-1234"
-        },
-        {
-          "Full name": "Thomas Anderson",
-          "Job title": "Frontend Developer",
-          "Company": "Web Solutions",
-          "Emails": "tanderson@websolutions.dev",
-          "Phone numbers": "555-901-2345"
-        },
-        {
-          "Full name": "Michelle Lee",
-          "Job title": "Digital Marketer",
-          "Company": "Growth Hackers",
-          "Emails": "michelle@growthhackers.io",
-          "Phone numbers": "555-012-3456"
-        },
-        {
-          "Full name": "Kevin Moore",
-          "Job title": "Backend Engineer",
-          "Company": "Server Solutions",
-          "Emails": "kevin@serversolutions.net",
-          "Phone numbers": "555-123-4567"
-        },
-        {
-          "Full name": "Amanda Clark",
-          "Job title": "Social Media Manager",
-          "Company": "Viral Brands",
-          "Emails": "amanda@viralbrands.co",
-          "Phone numbers": "555-234-5678"
-        },
-        {
-          "Full name": "Christopher Wright",
-          "Job title": "Project Manager",
-          "Company": "Delivery Masters",
-          "Emails": "chris@deliverymasters.com",
-          "Phone numbers": "555-345-6789"
-        }
-      ]);
-      setTotalResults(15);
-      setResultsLoading(false);
-    }, 1500);
+    // TODO: Replace with real API call returning search results;
+    // currently just ends loading state without adding dummy data.
+    setResultsLoading(false);
   };
 
   // Reset search
@@ -595,34 +479,7 @@ function SearchApp() {
       onAiProcessingChange: setIsAiProcessing,
       onResultsCountChange: setResultsCount
     };
-
-    switch (currentStep) {
-      case 0:
-        return <SearchStepOne 
-          {...commonProps}
-          proceedStep0={proceedStep0}
-        />;
-      case 1:
-        return <SearchStepOne 
-          {...commonProps}
-          proceedStep0={proceedStep0}
-        />;
-      case 2:
-        return <SearchStepOne 
-          {...commonProps}
-          proceedStep0={proceedStep0}
-        />;
-      case 3:
-        return <SearchStepOne 
-          {...commonProps}
-          proceedStep0={proceedStep0}
-        />;
-      default:
-        return <SearchStepOne 
-          {...commonProps}
-          proceedStep0={proceedStep0}
-        />;
-    }
+    return <SearchStepOne {...commonProps} />;
   };
 
   return (
@@ -671,9 +528,9 @@ function SearchApp() {
         {manualMode ? (
           <ManualSearch />
         ) : (
-          <main className={`flex-1 flex flex-col items-center px-4 ${currentStep === 3 ? 'mt-20' : 'mt-72'}`}>
+          <main className={`flex-1 flex flex-col px-4 ${currentStep < 3 ? 'items-center mt-72' : 'mt-20'}`}>
             {/* Fixed position container for consistent input placement */}
-            <div className={`w-full ${currentStep === 3 ? 'max-w-[900px]' : 'max-w-[690px]'}`}>
+            <div className={`w-full ${currentStep < 3 ? 'max-w-[690px]' : ''}`}>
               <AnimatePresence mode="wait">
                 <motion.div 
                   key={currentStep}

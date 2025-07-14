@@ -104,33 +104,9 @@ export const SearchContextProvider = ({ children }) => {
       // For now, we'll simulate loading with a delay
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Mock search results
-      const mockResults = [
-        {
-          "Full name": "John Doe",
-          "Job title": "Software Engineer",
-          "Company": "Tech Co",
-          "Emails": "john.doe@techco.com",
-          "Phone numbers": "555-123-4567"
-        },
-        {
-          "Full name": "Jane Smith",
-          "Job title": "Marketing Manager",
-          "Company": "Brand Inc",
-          "Emails": "jsmith@brandinc.net",
-          "Phone numbers": "555-987-6543"
-        },
-        {
-          "Full name": "Alex Johnson",
-          "Job title": "Product Manager",
-          "Company": "Innovation LLC",
-          "Emails": "ajohnson@innovation.co",
-          "Phone numbers": "555-456-7890"
-        }
-      ];
-      
-      setSearchResults(mockResults);
-      setTotalResults(mockResults.length); // Mock total
+      // No dummy data; real implementation should set results here when available
+      setSearchResults([]);
+      setTotalResults(0);
     } catch (error) {
       console.error("Error fetching search results:", error);
     }

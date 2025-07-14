@@ -53,7 +53,7 @@ function Navbar() {
   };
 
   return (
-    <header className="w-full flex items-center justify-between px-4 py-3 text-xs text-white">
+    <header className="w-full flex items-center justify-between px-4 py-3 text-xs text-white relative z-50 bg-[#212121]">
       <div className="flex items-center gap-3">
         <div className="h-7 w-7 rounded-full bg-neutral-500" />
         {/* Email dropdown on the left side */}
