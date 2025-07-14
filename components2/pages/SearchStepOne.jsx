@@ -21,6 +21,8 @@ const { setExportsDrawerOpen, setDrawerOpen, setCreditsScreenOpen, isExtensionLo
   const [exampleQueries] = useState(["software engineers in fintech", "marketing directors", "healthcare professionals in Boston", "data scientists with AI experience"]);
   const textareaRef = useRef(null);
   const plusButtonRef = useRef(null);
+  // Flag to ensure default search only runs once
+  const hasAutoSearchRun = useRef(false);
   const [showPlusOptions, setShowPlusOptions] = React.useState(false);
 
   function handleKeyDown(e) {
@@ -40,17 +42,36 @@ const { setExportsDrawerOpen, setDrawerOpen, setCreditsScreenOpen, isExtensionLo
     setApiError(null);
     if (onAiProcessingChange) onAiProcessingChange(true);
     if (onAiStatusChange) onAiStatusChange("Thinking...");
-    
+ 
+    /* =====================================================================
+       DUMMY API OVERRIDE — BEGIN
+       ---------------------------------------------------------------------
+       This entire block fakes an AI response so you can work offline.
+       • Remove (or comment out) **everything between the BEGIN/END markers**
+         AND delete the `return;` statement that follows to re-enable the
+         real `/api/ai/test-clone` request below.
+    ===================================================================== */
+    setTimeout(() => {
+      const dummyResults = {
+        jobTitles: ["Software Engineer"],
+        industryKeywords: ["Software"],
+        locationInfo: { hasLocation: false, components: {} },
+        hasAdditionalFilters: false,
+        additionalFilters: []
+      };
+      setApiResults(dummyResults);
+      setIsLoading(false);
+      if (onAiStatusChange) onAiStatusChange("Search");
+      if (onAiProcessingChange) onAiProcessingChange(false);
+    }, 300);
+    return; // <-- DELETE THIS LINE when restoring real API flow
+
+    /* ---------------- REAL API CALL (currently commented) ----------------
     try {
       // Call our consolidated API endpoint
       const response = await fetch('/api/ai/test-clone', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          description: submissionText,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: submissionText }),
       });
 
       const data = await response.json();
@@ -58,19 +79,15 @@ const { setExportsDrawerOpen, setDrawerOpen, setCreditsScreenOpen, isExtensionLo
       if (!response.ok) {
         throw new Error(data.error || `Request failed with status ${response.status}`);
       }
-      
       if (data.recommendedDatabase) {
         setRecommendedDatabase(data.recommendedDatabase);
       }
-      
       if (data.actualDatabase) {
         setActualDatabase(data.actualDatabase);
       }
-      
       setApiResults(data);
       setIsVerifyingTitles(false);
       // Results view removed; stay on search view.
-      
     } catch (error) {
       console.error("API call failed:", error);
       setApiError(error.message);
@@ -79,6 +96,9 @@ const { setExportsDrawerOpen, setDrawerOpen, setCreditsScreenOpen, isExtensionLo
       setIsLoading(false);
       if (onAiProcessingChange) onAiProcessingChange(false);
     }
+    ------------------------------------------------------------------------
+       DUMMY API OVERRIDE — END
+    ===================================================================== */
   }
 
   // Handle form submission for step 0
@@ -133,6 +153,23 @@ const { setExportsDrawerOpen, setDrawerOpen, setCreditsScreenOpen, isExtensionLo
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [plusButtonRef]);
+
+  /* =====================================================================
+     AUTO-RUN DUMMY SEARCH EFFECT — BEGIN
+     ---------------------------------------------------------------------
+     Automatically submits the default "software engineers" query on mount
+     so the results overlay is shown immediately.
+     • Remove (or comment out) this entire effect **between BEGIN/END** to
+       restore the standard empty-state search workflow.
+  ===================================================================== */
+  useEffect(() => {
+    if (hasAutoSearchRun.current) return;
+    hasAutoSearchRun.current = true;
+    const defaultQuery = "software engineers";
+    setText(defaultQuery);
+    handleAISubmit(defaultQuery);
+  }, []);
+  /* ---------------- AUTO-RUN DUMMY SEARCH EFFECT — END ---------------- */
 
   return (
     <>
