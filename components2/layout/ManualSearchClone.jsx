@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Combobox } from "@headlessui/react";
 import { ChevronUpDownIcon, ChevronDownIcon, ArrowLeftIcon } from "@heroicons/react/24/solid";
 import { createClient } from "@/utils/supabase/client";
+import { useSearchContext } from "../context/SearchContext";
 
 // Database table configurations
 const DB_TABLES = [
@@ -212,6 +213,7 @@ export default function ManualSearchClone({
   onResultsCountChange = null,
   onBack = null // optional callback to return to search input view
 }) {
+  const { setFiltersDrawerOpen, setFilterDrawerData } = useSearchContext();
   // Table selection state
   const [selectedTable, setSelectedTable] = useState(() => {
     // If we have a recommended database, find it in our tables
@@ -245,8 +247,6 @@ export default function ManualSearchClone({
 
   // Column & Filter Section visibility
   const [showColumnSelector, setShowColumnSelector] = useState(false);
-  // Filters panel visibility (now hidden by default and toggled via top button)
-  const [showFilterSection, setShowFilterSection] = useState(false);
 
   // Searching columns in Column Modal
   const [columnSearch, setColumnSearch] = useState("");
@@ -284,19 +284,27 @@ export default function ManualSearchClone({
     }
   }, [matchingCount, onResultsCountChange]);
 
-  // Function to show filter modal and initialize with empty filter if needed
+  // Function to show filter drawer and initialize with empty filter if needed
   function toggleFilterSection() {
-    if (!showFilterSection && pendingFilters.length === 0) {
-      // Make a copy so we can discard changes if user cancels
-      setPendingFilters(JSON.parse(JSON.stringify(filters.length ? filters : [{
-        column: "",
-        condition: "contains",
-        tokens: [],
-        pendingText: "",
-        subop: ""
-      }])));
-    }
-    setShowFilterSection(!showFilterSection);
+    // Make a copy so we can discard changes if user cancels
+    const initialFilters = filters.length ? filters : [{
+      column: "",
+      condition: "contains",
+      tokens: [],
+      pendingText: "",
+      subop: ""
+    }];
+    
+    // Set the drawer data
+    setFilterDrawerData({
+      availableColumns,
+      pendingFilters: JSON.parse(JSON.stringify(initialFilters)),
+      selectedTable,
+      onApplyFilters: handleApplyFilters,
+      onClose: handleCloseFiltersDrawer
+    });
+    
+    setFiltersDrawerOpen(true);
     // Close other modals
     setShowColumnSelector(false);
     setShowExportSection(false);
@@ -307,7 +315,6 @@ export default function ManualSearchClone({
     setColumnSearch("");
     setShowColumnSelector(!showColumnSelector);
     // Close other modals
-    setShowFilterSection(false);
     setShowExportSection(false);
   }
   
@@ -315,7 +322,6 @@ export default function ManualSearchClone({
   function toggleExportSection() {
     setShowExportSection(!showExportSection);
     // Close other modals
-    setShowFilterSection(false);
     setShowColumnSelector(false);
   }
 
@@ -344,8 +350,6 @@ export default function ManualSearchClone({
           setShowColumnSelector(false);
         } else if (showExportSection) {
           setShowExportSection(false);
-        } else if (showFilterSection) {
-          setShowFilterSection(false);
         }
       }
     }
@@ -354,7 +358,7 @@ export default function ManualSearchClone({
     return () => {
       document.removeEventListener("keydown", handleEscapeKey);
     };
-  }, [showColumnSelector, showExportSection, showFilterSection]);
+  }, [showColumnSelector, showExportSection]);
 
   // On mount, fetch user tokens_total
   useEffect(() => {
@@ -827,76 +831,13 @@ export default function ManualSearchClone({
   // ------------------------
   //    Filter Logic
   // ------------------------
-  function openFilterModal() {
-    // Make a copy so we can discard changes if user cancels
-    setPendingFilters(JSON.parse(JSON.stringify(filters)));
-    setShowFilterSection(true);
+  function handleCloseFiltersDrawer() {
+    setFiltersDrawerOpen(false);
   }
-  function closeFilterModal() {
-    setShowFilterSection(false);
-  }
-  function addFilterLine() {
-    const isFirst = pendingFilters.length === 0;
-    setPendingFilters((prev) => [
-      ...prev,
-      {
-        column: "",
-        condition: "contains",
-        tokens: [],
-        pendingText: "",
-        subop: isFirst ? "" : "AND",
-      },
-    ]);
-  }
-  function removeFilterLine(index) {
-    setPendingFilters((prev) => prev.filter((_, i) => i !== index));
-  }
-  function updateFilterLine(index, field, value) {
-    setPendingFilters((prev) => {
-      const arr = [...prev];
-      arr[index][field] = value;
-      return arr;
-    });
-  }
-  function updateLineSubop(index, newOp) {
-    setPendingFilters((prev) => {
-      const arr = [...prev];
-      arr[index].subop = newOp;
-      return arr;
-    });
-  }
-  function updateLineTokens(index, newTokens) {
-    setPendingFilters((prev) => {
-      const arr = [...prev];
-      arr[index].tokens = newTokens;
-      return arr;
-    });
-  }
-  function updateLinePendingText(index, txt) {
-    setPendingFilters((prev) => {
-      const arr = [...prev];
-      arr[index].pendingText = txt;
-      return arr;
-    });
-  }
+  // Filter functions are now in FiltersDrawer component
 
-  async function applyFilters() {
-    const updated = pendingFilters.map((rule) => {
-      // If there's leftover text, add it as a token
-      if (
-        (rule.condition === "contains" || rule.condition === "equals") &&
-        rule.pendingText?.trim()
-      ) {
-        if (!rule.tokens.includes(rule.pendingText.trim())) {
-          rule.tokens.push(rule.pendingText.trim());
-        }
-      }
-      rule.pendingText = "";
-      return rule;
-    });
-
+  async function handleApplyFilters(updated) {
     setFilters(updated);
-    setShowFilterSection(false);
     await saveUserSettings(visibleColumns, updated);
   }
 
@@ -1047,7 +988,7 @@ export default function ManualSearchClone({
               <ArrowLeftIcon className="h-4 w-4 text-neutral-300" />
             </button>
           )}
-        </div>
+                </div>
  
         {/* Right side controls */}
         <div className="flex flex-wrap items-center gap-3">
@@ -1075,12 +1016,12 @@ export default function ManualSearchClone({
           >
             <span>Filters</span>
             <ChevronDownIcon
-              className={`h-4 w-4 transition-transform ${showFilterSection ? 'rotate-180' : ''}`}
+              className={`h-4 w-4 transition-transform`}
             />
           </button>
 
           {/* Active Filter Badges (blue tags) - show when filters exist */}
-          {filters.length > 0 && (
+                {filters.length > 0 && (
             <div className="flex flex-wrap gap-2 ml-2">
               {filters.map((f, i) => {
                 const prefix = i === 0 ? "Where" : f.subop || "AND";
@@ -1097,11 +1038,11 @@ export default function ManualSearchClone({
                   </div>
                 );
               })}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-        </div>
-      </div>
- 
+
       {/* Database Info Panel removed */}
  
       {/* Main Search Interface */}
@@ -1213,14 +1154,14 @@ export default function ManualSearchClone({
                   )}
                 </div>
                 <div className="flex gap-3">
-                  <button 
+              <button 
                     onClick={prevPage} 
                     disabled={page === 0}
                     className={`px-5 py-2.5 text-sm rounded-lg font-medium transition-all duration-200 ${page === 0 ? 'bg-white/5 text-white/30 border-white/10 cursor-not-allowed' : 'bg-white/5 hover:bg-white/10 backdrop-blur-sm text-white border-white/10 hover:border-white/20'}`}
-                  >
+              >
                     Previous
-                  </button>
-                  <button 
+              </button>
+              <button 
                     onClick={nextPage} 
                     disabled={
                       page >=
@@ -1240,17 +1181,17 @@ export default function ManualSearchClone({
                     }`}
                   >
                     Next
-                  </button>
+              </button>
                 </div>
               </div>
             </div>
           )}
         </div>
       </div>
-      </div>
-
+            </div>
+            
       {/* Column Selection Modal */}
-      {showColumnSelector && (
+              {showColumnSelector && (
         <>
           {/* Semi-transparent overlay */}
           <div className="fixed inset-0 bg-black/60 z-40" />
@@ -1268,31 +1209,31 @@ export default function ManualSearchClone({
                 <p className="text-sm text-gray-400 mb-6">
                   Select which columns to display in your results table.
                 </p>
-                
+                  
                 <div className="mb-6">
-                  <input
-                    type="text"
-                    placeholder="Search columns..."
-                    value={columnSearch}
-                    onChange={(e) => setColumnSearch(e.target.value)}
+                    <input
+                      type="text"
+                      placeholder="Search columns..."
+                      value={columnSearch}
+                      onChange={(e) => setColumnSearch(e.target.value)}
                     className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
-                  />
-                </div>
-                
+                    />
+                  </div>
+                  
                 <div className="max-h-60 overflow-y-auto space-y-1 mb-6">
-                  {filteredAvailableColumns.map((col) => (
+                    {filteredAvailableColumns.map((col) => (
                     <label key={col} className="flex items-center gap-3 cursor-pointer py-3 px-4 hover:bg-[#333333] rounded-lg transition-all duration-200">
-                      <input
-                        type="checkbox"
-                        checked={visibleColumns.includes(col)}
-                        onChange={() => toggleColumn(col)}
+                        <input
+                          type="checkbox"
+                          checked={visibleColumns.includes(col)}
+                          onChange={() => toggleColumn(col)}
                         className="h-4 w-4 accent-blue-500 rounded"
-                      />
+                        />
                       <span className="text-sm text-gray-300">{col}</span>
-                    </label>
-                  ))}
-                </div>
-                
+                      </label>
+                    ))}
+                  </div>
+                  
                 <div className="flex gap-3">
                   <button 
                     onClick={() => setShowColumnSelector(false)}
@@ -1311,10 +1252,10 @@ export default function ManualSearchClone({
             </div>
           </div>
         </>
-      )}
-
+              )}
+              
       {/* Export Data Modal */}
-      {showExportSection && (
+              {showExportSection && (
         <>
           {/* Semi-transparent overlay */}
           <div className="fixed inset-0 bg-black/60 z-40" />
@@ -1329,47 +1270,47 @@ export default function ManualSearchClone({
             >
               <div className="p-6">
                 <h3 className="font-medium text-lg text-white mb-2">Export Data</h3>
-                
-                {exporting ? (
+                  
+                  {exporting ? (
                   <div className="text-center py-4">
                     <div className="w-full bg-[#404040] h-2 rounded-full mb-4 overflow-hidden">
-                      <div
+                        <div
                         className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                        style={{ width: `${exportProgress}%` }}
-                      />
-                    </div>
+                          style={{ width: `${exportProgress}%` }}
+                        />
+                      </div>
                     <div className="text-sm text-gray-400">
-                      {exportProgress}% Complete
+                        {exportProgress}% Complete
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <>
+                  ) : (
+                    <>
                     <p className="text-sm text-gray-400 mb-6 leading-relaxed">
-                      Choose how many rows to export. You'll be charged 1 token per
-                      row, but only if the export completes successfully.
-                    </p>
-                    
+                        Choose how many rows to export. You'll be charged 1 token per
+                        row, but only if the export completes successfully.
+                      </p>
+                      
                     <div className="mb-6">
                       <div className="text-sm text-gray-300 mb-3">Amount</div>
-                      <input
-                        type="number"
-                        value={rowsToExport === null ? "" : rowsToExport}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setRowsToExport(val === "" ? null : Number(val));
-                        }}
-                        min="1"
+                        <input
+                          type="number"
+                          value={rowsToExport === null ? "" : rowsToExport}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setRowsToExport(val === "" ? null : Number(val));
+                          }}
+                          min="1"
                         placeholder="0.00"
                         className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
-                      />
-                    </div>
-                    
-                    {exportError && (
+                        />
+                      </div>
+                      
+                      {exportError && (
                       <div className="mb-6 text-sm text-red-400 bg-red-500/10 rounded-lg px-4 py-3">
                         {exportError}
                       </div>
-                    )}
-                    
+                      )}
+                      
                     <div className="flex gap-3">
                       <button 
                         onClick={() => setShowExportSection(false)}
@@ -1384,187 +1325,21 @@ export default function ManualSearchClone({
                         Export
                       </button>
                     </div>
-                  </>
-                )}
-                
-                {exportDone && (
+                    </>
+                  )}
+                  
+                  {exportDone && (
                   <div className="mt-6 text-sm text-green-400 bg-green-500/10 rounded-lg px-4 py-3 text-center">
-                    Export completed successfully!
-                  </div>
-                )}
-              </div>
+                      Export completed successfully!
+                </div>
+              )}
             </div>
           </div>
+        </div>
         </>
       )}
 
-      {/* Filters Modal */}
-      {showFilterSection && (
-        <>
-          {/* Semi-transparent overlay */}
-          <div className="fixed inset-0 bg-black/60 z-40" />
-          
-          <div 
-            className="fixed inset-0 flex items-center justify-center z-50 p-4"
-            onClick={() => setShowFilterSection(false)}
-          >
-            <div 
-              className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-2xl w-full max-w-4xl max-h-[80vh] overflow-hidden shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-6">
-                <h3 className="font-medium text-lg text-white mb-2">Filter Settings</h3>
-                <p className="text-sm text-gray-400 mb-6">
-                  Create rules to filter your search results.
-                </p>
-                
-                <div className="max-h-[60vh] overflow-y-auto pr-2">
-                  <div className="space-y-4">
-                    {pendingFilters.map((rule, index) => (
-                      <div
-                        key={index}
-                        className="bg-[#1a1a1a] border border-[#404040] p-6 rounded-lg"
-                      >
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          {index > 0 && (
-                            <div className="md:col-span-3">
-                              <div className="text-sm text-gray-300 mb-3">Operator</div>
-                              <select
-                                value={rule.subop}
-                                onChange={(e) => updateLineSubop(index, e.target.value)}
-                                className="w-full bg-[#2a2a2a] border border-[#404040] rounded-lg py-3 px-4 text-sm text-white focus:outline-none focus:border-[#505050] transition-all duration-200"
-                              >
-                                <option value="AND">AND</option>
-                                <option value="OR">OR</option>
-                              </select>
-                            </div>
-                          )}
-                          
-                          <div>
-                            <div className="text-sm text-gray-300 mb-3">Column</div>
-                            <Combobox
-                              value={rule.column}
-                              onChange={(val) => updateFilterLine(index, "column", val)}
-                            >
-                              <div className="relative w-full">
-                                <Combobox.Button
-                                  className="relative w-full bg-[#2a2a2a] border border-[#404040] text-white text-left rounded-lg py-3 px-4 text-sm focus:outline-none focus:border-[#505050] transition-all duration-200"
-                                >
-                                  <Combobox.Input
-                                    onChange={(e) => {
-                                      setSearchQuery(e.target.value);
-                                      updateFilterLine(index, "column", e.target.value);
-                                    }}
-                                    displayValue={(val) => val}
-                                    placeholder="Select column..."
-                                    className="w-full bg-transparent focus:outline-none text-white placeholder:text-gray-500"
-                                  />
-                                  <span className="absolute inset-y-0 right-0 flex items-center pr-3">
-                                    <ChevronUpDownIcon
-                                      className="h-4 w-4 text-gray-400"
-                                      aria-hidden="true"
-                                    />
-                                  </span>
-                                </Combobox.Button>
-                                <Combobox.Options
-                                  className="absolute z-10 mt-1 w-full bg-[#2a2a2a] border border-[#404040] rounded-lg max-h-40 overflow-auto shadow-lg"
-                                >
-                                  {(!searchQuery
-                                    ? availableColumns
-                                    : availableColumns.filter((c) =>
-                                    c.toLowerCase().includes(searchQuery.toLowerCase())
-                                      )
-                                  ).map((c) => (
-                                    <Combobox.Option
-                                      key={c}
-                                      value={c}
-                                      className={({ active }) =>
-                                        `cursor-pointer select-none px-4 py-3 text-sm ${
-                                          active
-                                            ? "bg-[#333333] text-white"
-                                            : "text-gray-300"
-                                        }`
-                                      }
-                                    >
-                                      {c}
-                                    </Combobox.Option>
-                                  ))}
-                                </Combobox.Options>
-                              </div>
-                            </Combobox>
-                          </div>
-                          
-                          <div>
-                            <div className="text-sm text-gray-300 mb-3">Condition</div>
-                            <select
-                              value={rule.condition}
-                              onChange={(e) =>
-                                updateFilterLine(index, "condition", e.target.value)
-                              }
-                              className="w-full bg-[#2a2a2a] border border-[#404040] rounded-lg py-3 px-4 text-sm text-white focus:outline-none focus:border-[#505050] transition-all duration-200"
-                            >
-                              <option value="contains">Contains</option>
-                              <option value="equals">Equals</option>
-                              <option value="is empty">Is Empty</option>
-                              <option value="is not empty">Is Not Empty</option>
-                            </select>
-                          </div>
-                          
-                          {(rule.condition === "contains" || rule.condition === "equals") && (
-                            <div className="md:col-span-3">
-                              <div className="text-sm text-gray-300 mb-3">Search Terms</div>
-                              <TokensInput
-                                tokens={rule.tokens}
-                                setTokens={(arr) => updateLineTokens(index, arr)}
-                                pendingText={rule.pendingText || ""}
-                                setPendingText={(txt) => updateLinePendingText(index, txt)}
-                                tableName={selectedTable.id}
-                                column={rule.column}
-                              />
-                            </div>
-                          )}
-                          
-                          <div className="md:col-span-3 flex justify-end">
-                            <button 
-                              onClick={() => removeFilterLine(index)}
-                              className="px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm rounded-lg transition-all duration-200"
-                            >
-                              Remove Rule
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    
-                    <div className="flex gap-3 pt-4">
-                      <button
-                        onClick={addFilterLine}
-                        className="px-4 py-3 bg-[#404040] hover:bg-[#4a4a4a] text-white text-sm rounded-lg flex items-center gap-2 transition-all duration-200"
-                      >
-                        <span>+</span> Add Rule
-                      </button>
-                      
-                      <button 
-                        onClick={() => setShowFilterSection(false)}
-                        className="px-4 py-3 bg-[#404040] hover:bg-[#4a4a4a] text-white font-medium text-sm rounded-lg transition-all duration-200"
-                      >
-                        Cancel
-                      </button>
-                      
-                      <button 
-                        onClick={applyFilters}
-                        className="px-4 py-3 bg-[#505050] hover:bg-[#5a5a5a] text-white font-medium text-sm rounded-lg ml-auto transition-all duration-200"
-                      >
-                        Apply Filters
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
+      {/* FiltersDrawer is now rendered at the SearchProvider level */}
     </div>
   );
 } 

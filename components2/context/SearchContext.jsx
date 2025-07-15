@@ -31,6 +31,7 @@ export const SearchContextProvider = ({ children }) => {
   /* ---------- drawer states ---------- */
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [exportsDrawerOpen, setExportsDrawerOpen] = useState(false);
+  const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
   
   /* ---------- search results & filters ---------- */
   const [searchResults, setSearchResults] = useState([]);
@@ -38,6 +39,15 @@ export const SearchContextProvider = ({ children }) => {
   const [pendingSearchFilters, setPendingSearchFilters] = useState([]);
   const [totalResults, setTotalResults] = useState(0);
   const searchLimit = 20;
+  
+  /* ---------- filter drawer state ---------- */
+  const [filterDrawerData, setFilterDrawerData] = useState({
+    availableColumns: [],
+    pendingFilters: [],
+    selectedTable: null,
+    onApplyFilters: null,
+    onClose: null
+  });
   
   /* ---------- toast states ---------- */
   const [isExtensionLoading, setIsExtensionLoading] = useState(false);
@@ -129,6 +139,7 @@ export const SearchContextProvider = ({ children }) => {
     // Drawer States
     drawerOpen, setDrawerOpen,
     exportsDrawerOpen, setExportsDrawerOpen,
+    filtersDrawerOpen, setFiltersDrawerOpen,
     
     // Search Results & Filters
     searchResults, setSearchResults,
@@ -136,6 +147,9 @@ export const SearchContextProvider = ({ children }) => {
     pendingSearchFilters, setPendingSearchFilters,
     totalResults, setTotalResults,
     searchLimit,
+    
+    // Filter Drawer Data
+    filterDrawerData, setFilterDrawerData,
     
     // Toast States  
     isExtensionLoading, setIsExtensionLoading,

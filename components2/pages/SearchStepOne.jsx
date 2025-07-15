@@ -175,10 +175,10 @@ const { setExportsDrawerOpen, setDrawerOpen, setCreditsScreenOpen, isExtensionLo
     <>
       {apiResults ? (
         <div className="fixed inset-0 p-4 pt-20 overflow-auto bg-[#212121]">
-          <ManualSearchClone 
-            aiResults={apiResults}
-            recommendedDatabase={recommendedDatabase || actualDatabase}
-            onResultsCountChange={onResultsCountChange}
+              <ManualSearchClone 
+                aiResults={apiResults}
+                recommendedDatabase={recommendedDatabase || actualDatabase}
+                onResultsCountChange={onResultsCountChange}
             onBack={() => setApiResults(null)}
           />
         </div>

@@ -11,6 +11,7 @@ import Guide from "../layout/Guide";
 import SearchStepOne from "../pages/SearchStepOne";
 import EnrichmentDrawer from "../layout/EnrichmentDrawer";
 import ExportsDrawer from "../layout/ExportsDrawer";
+import FiltersDrawer from "../layout/FiltersDrawer";
 import Toasts from "@/components/toasts";
 
 // Component that contains all the main UI and routing
@@ -28,6 +29,8 @@ function SearchApp() {
     setBrainstorm,
     drawerOpen,
     exportsDrawerOpen,
+    filtersDrawerOpen,
+    setFiltersDrawerOpen,
     searchResults,
     setSearchResults,
     totalResults,
@@ -37,7 +40,8 @@ function SearchApp() {
     searchLimit,
     navigateToStep,
     user,
-    profile
+    profile,
+    filterDrawerData
   } = useSearchContext();
 
   const router = useRouter();
@@ -236,7 +240,7 @@ function SearchApp() {
     
     // TODO: Replace with real API call returning search results;
     // currently just ends loading state without adding dummy data.
-    setResultsLoading(false);
+      setResultsLoading(false);
   };
 
   // Reset search
@@ -550,6 +554,13 @@ function SearchApp() {
       {/* Drawers */}
       <EnrichmentDrawer />
       <ExportsDrawer />
+      <FiltersDrawer 
+        availableColumns={filterDrawerData.availableColumns}
+        pendingFilters={filterDrawerData.pendingFilters}
+        selectedTable={filterDrawerData.selectedTable}
+        onApplyFilters={filterDrawerData.onApplyFilters}
+        onClose={filterDrawerData.onClose || (() => setFiltersDrawerOpen(false))}
+      />
       
       {/* Toast notifications */}
       <Toasts />
