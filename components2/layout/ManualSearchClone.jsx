@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { Combobox } from "@headlessui/react";
-import { ChevronUpDownIcon, ChevronDownIcon } from "@heroicons/react/24/solid";
+import { ChevronUpDownIcon, ChevronDownIcon, ArrowLeftIcon } from "@heroicons/react/24/solid";
 import { createClient } from "@/utils/supabase/client";
 
 // Database table configurations
@@ -209,7 +209,8 @@ export default function ManualSearchClone({
   aiResults = null, 
   recommendedDatabase = null,
   className = "",
-  onResultsCountChange = null
+  onResultsCountChange = null,
+  onBack = null // optional callback to return to search input view
 }) {
   // Table selection state
   const [selectedTable, setSelectedTable] = useState(() => {
@@ -244,7 +245,8 @@ export default function ManualSearchClone({
 
   // Column & Filter Section visibility
   const [showColumnSelector, setShowColumnSelector] = useState(false);
-  const [showFilterSection, setShowFilterSection] = useState(true);
+  // Filters panel visibility (now hidden by default and toggled via top button)
+  const [showFilterSection, setShowFilterSection] = useState(false);
 
   // Searching columns in Column Modal
   const [columnSearch, setColumnSearch] = useState("");
@@ -269,6 +271,8 @@ export default function ManualSearchClone({
 
   // Database counts (can be updated dynamically)
   const [databaseCounts, setDatabaseCounts] = useState({});
+  // Toggle for showing/hiding the Database Info section
+  const [showDbInfo, setShowDbInfo] = useState(false);
 
   // Handle click outside dropdown
   const tableDropdownRef = useRef(null);
@@ -1008,83 +1012,120 @@ export default function ManualSearchClone({
   //    Render
   // ------------------------
   return (
-    <div className={`bg-[#1a1a1a] text-white ${className}`}>
+    <div className={`bg-[#212121] text-white ${className}`}>
+      <div className="max-w-7xl mx-auto px-6 py-8">
+      {/* Top Control Bar */}
+      <div className="flex justify-between items-center mb-6 max-w-6xl mx-auto">
+        {/* Left side: Back button and results count */}
+        <div className="flex items-center gap-4">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="px-2 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm flex items-center"
+              aria-label="Back to Search"
+            >
+              <ArrowLeftIcon className="h-4 w-4 text-neutral-300" />
+            </button>
+          )}
+          <span className="text-sm text-neutral-300">
+            {countLoading ? (
+              <span className="inline-block w-16 bg-[#303030] h-5 rounded animate-pulse" />
+            ) : (
+              `${formatNumber(matchingCount)} results`
+            )}
+          </span>
+          <span className="text-sm text-neutral-500">| {selectedTable.name}</span>
+        </div>
+ 
+        {/* Right side controls */}
+        <div className="flex flex-wrap items-center gap-3">
+           
+          {/* Select Columns */}
+          <button
+            onClick={toggleColumnSelector}
+            className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm"
+          >
+            Select Columns
+          </button>
+  
+          {/* Export Data */}
+          <button
+            onClick={toggleExportSection}
+            className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm"
+          >
+            Export Data
+          </button>
+  
+          {/* Filters */}
+          <button
+            onClick={toggleFilterSection}
+            className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm flex items-center gap-2"
+          >
+            <span>Filters</span>
+            <ChevronDownIcon
+              className={`h-4 w-4 transition-transform ${showFilterSection ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {/* Active Filter Badges (blue tags) - show only when filters panel open */}
+          {showFilterSection && filters.length > 0 && (
+            <div className="flex flex-wrap gap-2 ml-2">
+              {filters.map((f, i) => {
+                const prefix = i === 0 ? "Where" : f.subop || "AND";
+                const safeTokens = Array.isArray(f.tokens) ? f.tokens : [];
+                let desc = "";
+                if (f.condition === "is empty" || f.condition === "is not empty") {
+                  desc = f.condition;
+                } else {
+                  desc = `${f.condition} [${safeTokens.join(", ")}]`;
+                }
+                return (
+                  <div key={i} className="bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs px-3 py-2 rounded-md whitespace-nowrap">
+                    <strong>{prefix}</strong> {f.column} {desc}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+ 
+      {/* Database Info Panel removed */}
+ 
       {/* Main Search Interface */}
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Left Sidebar - converted to top section on mobile */}
-        <div className="lg:w-80 flex-shrink-0">
+        {/* Left Sidebar: only visible when column selector or export panel is open */}
+        <div className={`lg:w-80 flex-shrink-0 ${!(showColumnSelector || showExportSection) ? 'hidden' : ''}`}>
           <div className="bg-[#252525] border border-[#333333] rounded-lg overflow-hidden">
-            {/* Database Stats */}
-            <div className="px-4 py-4 border-b border-[#333333]">
-              <div className="text-xs text-neutral-400 mb-3 uppercase tracking-wide">Database Info</div>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center p-2 bg-[#2a2a2a] rounded">
-                  <span className="text-sm text-neutral-300">Total Records:</span>
-                  <span className="font-semibold text-white">{formatNumber(getTableCount(selectedTable))}</span>
-                </div>
-                {filters.length > 0 && (
-                  <div className="flex justify-between items-center p-2 bg-green-500/10 border border-green-500/20 rounded">
-                    <span className="text-sm text-neutral-300">Matching:</span>
-                    <span className="font-semibold text-green-400">
-                      {countLoading ? (
-                        <span className="inline-block w-16 bg-[#303030] h-5 rounded animate-pulse" />
-                      ) : (
-                        formatNumber(matchingCount)
-                      )}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
+             {/* Sidebar no longer shows top-level buttons; contents rendered below if toggled */}
 
-            {/* Action Buttons */}
-            <div className="px-4 py-4 border-b border-[#333333] space-y-3">
-              <div className="text-xs text-neutral-400 mb-3 uppercase tracking-wide">Actions</div>
-              
-              <button 
-                onClick={toggleColumnSelector}
-                className={`w-full px-4 py-3 rounded-md text-sm font-medium flex items-center gap-3 transition-colors ${showColumnSelector ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'bg-[#303030] hover:bg-[#404040] border border-[#404040] text-white'}`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-columns"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="12" x2="12" y1="3" y2="21"/></svg>
-                <span>Select Columns</span>
-              </button>
-              
-              <button 
-                onClick={toggleExportSection}
-                className={`w-full px-4 py-3 rounded-md text-sm font-medium flex items-center gap-3 transition-colors ${showExportSection ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'bg-[#303030] hover:bg-[#404040] border border-[#404040] text-white'}`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-download"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                <span>Export Data</span>
-              </button>
-            </div>
-            
             {/* Dynamic Content Section */}
             <div className="max-h-96 overflow-y-auto">
               {/* Column Selection Section */}
               {showColumnSelector && (
-                <div className="px-4 py-4 border-b border-[#333333]">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-sm text-white">Column Selection</h3>
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-semibold text-lg text-white">Column Selection</h3>
                   </div>
                   
-                  <div className="mb-4">
+                  <div className="mb-6">
                     <input
                       type="text"
                       placeholder="Search columns..."
                       value={columnSearch}
                       onChange={(e) => setColumnSearch(e.target.value)}
-                      className="w-full bg-[#303030] border border-[#404040] rounded-md px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-green-500"
+                      className="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/50 focus:outline-none focus:border-white/30 transition-all duration-200"
                     />
                   </div>
                   
-                  <div className="max-h-60 overflow-y-auto space-y-2 mb-4">
+                  <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-3 mb-6">
                     {filteredAvailableColumns.map((col) => (
-                      <label key={col} className="flex items-center gap-3 cursor-pointer py-2 px-2 hover:bg-[#303030] rounded">
+                      <label key={col} className="flex items-center gap-3 cursor-pointer py-3 px-3 hover:bg-white/5 rounded-lg transition-all duration-200">
                         <input
                           type="checkbox"
                           checked={visibleColumns.includes(col)}
                           onChange={() => toggleColumn(col)}
-                          className="h-4 w-4 accent-green-500"
+                          className="h-4 w-4 accent-blue-500 rounded"
                         />
                         <span className="text-sm text-white">{col}</span>
                       </label>
@@ -1093,7 +1134,7 @@ export default function ManualSearchClone({
                   
                   <button 
                     onClick={closeColumnSelectorModal}
-                    className="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-black font-semibold text-sm rounded-md"
+                    className="w-full px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold text-sm rounded-xl transition-all duration-200"
                   >
                     Apply Changes
                   </button>
@@ -1102,32 +1143,32 @@ export default function ManualSearchClone({
               
               {/* Export Section */}
               {showExportSection && (
-                <div className="px-4 py-4 border-b border-[#333333]">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-sm text-white">Export Data</h3>
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-semibold text-lg text-white">Export Data</h3>
                   </div>
                   
                   {exporting ? (
                     <div>
-                      <div className="w-full bg-[#303030] h-3 rounded-full mb-3 overflow-hidden">
+                      <div className="w-full bg-white/10 h-2 rounded-full mb-4 overflow-hidden">
                         <div
-                          className="h-full bg-green-500 rounded-full transition-all duration-300"
+                          className="h-full bg-blue-500 rounded-full transition-all duration-300"
                           style={{ width: `${exportProgress}%` }}
                         />
                       </div>
-                      <div className="text-sm text-neutral-400 text-center">
+                      <div className="text-sm text-white/70 text-center">
                         {exportProgress}% Complete
                       </div>
                     </div>
                   ) : (
                     <>
-                      <p className="text-xs text-neutral-400 mb-4">
+                      <p className="text-sm text-white/70 mb-6">
                         Choose how many rows to export. You'll be charged 1 token per
                         row, but only if the export completes successfully.
                       </p>
                       
-                      <div className="mb-4">
-                        <div className="text-xs text-neutral-400 mb-2">Rows to Export</div>
+                      <div className="mb-6">
+                        <div className="text-sm text-white/70 mb-3">Rows to Export</div>
                         <input
                           type="number"
                           value={rowsToExport === null ? "" : rowsToExport}
@@ -1136,17 +1177,17 @@ export default function ManualSearchClone({
                             setRowsToExport(val === "" ? null : Number(val));
                           }}
                           min="1"
-                          className="w-full bg-[#303030] border border-[#404040] rounded-md px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-green-500"
+                          className="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/50 focus:outline-none focus:border-white/30 transition-all duration-200"
                         />
                       </div>
                       
                       {exportError && (
-                        <div className="mb-4 text-sm text-red-500">{exportError}</div>
+                        <div className="mb-4 text-sm text-red-400">{exportError}</div>
                       )}
                       
                       <button
                         onClick={startExport}
-                        className="w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-black font-semibold text-sm rounded-md"
+                        className="w-full px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold text-sm rounded-xl transition-all duration-200"
                       >
                         Start Export
                       </button>
@@ -1154,7 +1195,7 @@ export default function ManualSearchClone({
                   )}
                   
                   {exportDone && (
-                    <p className="mt-3 text-sm text-green-500">
+                    <p className="mt-4 text-sm text-blue-400">
                       Export completed successfully!
                     </p>
                   )}
@@ -1167,194 +1208,173 @@ export default function ManualSearchClone({
         {/* Main Content Area */}
         <div className="flex-1 min-w-0">
           {/* Filter Section */}
-          <div className="mb-6 bg-[#252525] border border-[#333333] rounded-lg overflow-hidden">
-            <div className="px-4 py-4 border-b border-[#333333]">
-              <h3 className="font-semibold text-sm text-white">Filter Settings</h3>
-            </div>
-            
-            <div className="p-4 space-y-4">
-              {pendingFilters.map((rule, index) => (
-                <div
-                  key={index}
-                  className="bg-[#303030] border border-[#404040] p-4 rounded-md"
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {index > 0 && (
-                      <div className="md:col-span-3">
-                        <div className="text-xs text-neutral-400 mb-2">Operator</div>
-                        <select
-                          value={rule.subop}
-                          onChange={(e) => updateLineSubop(index, e.target.value)}
-                          className="w-full bg-[#252525] border border-[#404040] rounded-md py-2 px-3 text-sm text-white"
+          {showFilterSection && (
+            <div className="mb-8 bg-white/5 backdrop-blur-sm rounded-2xl overflow-hidden border border-white/10">
+              <div className="px-6 py-5 border-b border-white/10">
+                <h3 className="font-semibold text-lg text-white">Filter Settings</h3>
+              </div>
+              
+              <div className="p-6 space-y-6">
+                {pendingFilters.map((rule, index) => (
+                  <div
+                    key={index}
+                    className="bg-white/5 backdrop-blur-sm p-6 rounded-xl border border-white/10"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {index > 0 && (
+                        <div className="md:col-span-3">
+                          <div className="text-sm text-white/70 mb-3">Operator</div>
+                          <select
+                            value={rule.subop}
+                            onChange={(e) => updateLineSubop(index, e.target.value)}
+                            className="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl py-3 px-4 text-sm text-white focus:outline-none focus:border-white/30 transition-all duration-200"
+                          >
+                            <option value="AND">AND</option>
+                            <option value="OR">OR</option>
+                          </select>
+                        </div>
+                      )}
+                      
+                      <div>
+                        <div className="text-sm text-white/70 mb-3">Column</div>
+                        <Combobox
+                          value={rule.column}
+                          onChange={(val) => updateFilterLine(index, "column", val)}
                         >
-                          <option value="AND">AND</option>
-                          <option value="OR">OR</option>
+                          <div className="relative w-full">
+                            <Combobox.Button
+                              className="relative w-full border border-white/10 bg-white/5 backdrop-blur-sm text-white text-left rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-white/30 transition-all duration-200"
+                            >
+                              <Combobox.Input
+                                onChange={(e) => {
+                                  setSearchQuery(e.target.value);
+                                  updateFilterLine(index, "column", e.target.value);
+                                }}
+                                displayValue={(val) => val}
+                                placeholder="Select column..."
+                                className="w-full bg-transparent focus:outline-none"
+                              />
+                              <span className="absolute inset-y-0 right-0 flex items-center pr-2">
+                                <ChevronUpDownIcon
+                                  className="h-5 w-5 text-white/50"
+                                  aria-hidden="true"
+                                />
+                              </span>
+                            </Combobox.Button>
+                            <Combobox.Options
+                              className="absolute z-10 mt-1 w-full bg-white/10 backdrop-blur-sm border border-white/10 rounded-xl max-h-40 overflow-auto custom-scrollbar"
+                            >
+                              {(!searchQuery
+                                ? availableColumns
+                                : availableColumns.filter((c) =>
+                                c.toLowerCase().includes(searchQuery.toLowerCase())
+                                  )
+                              ).map((c) => (
+                                <Combobox.Option
+                                  key={c}
+                                  value={c}
+                                  className={({ active }) =>
+                                    `cursor-pointer select-none px-3 py-2 text-sm ${
+                                      active
+                                        ? "bg-blue-500/20 text-blue-400"
+                                        : "text-white"
+                                    }`
+                                  }
+                                >
+                                  {c}
+                                </Combobox.Option>
+                              ))}
+                            </Combobox.Options>
+                          </div>
+                        </Combobox>
+                      </div>
+                      
+                      <div>
+                        <div className="text-sm text-white/70 mb-3">Condition</div>
+                        <select
+                          value={rule.condition}
+                          onChange={(e) =>
+                            updateFilterLine(index, "condition", e.target.value)
+                          }
+                          className="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl py-3 px-4 text-sm text-white focus:outline-none focus:border-white/30 transition-all duration-200"
+                        >
+                          <option value="contains">Contains</option>
+                          <option value="equals">Equals</option>
+                          <option value="is empty">Is Empty</option>
+                          <option value="is not empty">Is Not Empty</option>
                         </select>
                       </div>
-                    )}
-                    
-                    <div>
-                      <div className="text-xs text-neutral-400 mb-2">Column</div>
-                      <Combobox
-                        value={rule.column}
-                        onChange={(val) => updateFilterLine(index, "column", val)}
-                      >
-                        <div className="relative w-full">
-                          <Combobox.Button
-                            className="relative w-full border border-[#404040] bg-[#252525] text-white text-left rounded-md py-2 px-3 text-sm"
-                          >
-                            <Combobox.Input
-                              onChange={(e) => {
-                                setSearchQuery(e.target.value);
-                                updateFilterLine(index, "column", e.target.value);
-                              }}
-                              displayValue={(val) => val}
-                              placeholder="Select column..."
-                              className="w-full bg-transparent focus:outline-none"
-                            />
-                            <span className="absolute inset-y-0 right-0 flex items-center pr-2">
-                              <ChevronUpDownIcon
-                                className="h-5 w-5 text-neutral-400"
-                                aria-hidden="true"
-                              />
-                            </span>
-                          </Combobox.Button>
-                          <Combobox.Options
-                            className="absolute z-10 mt-1 w-full bg-[#252525] border border-[#404040] rounded-md max-h-40 overflow-auto"
-                          >
-                            {(!searchQuery
-                              ? availableColumns
-                              : availableColumns.filter((c) =>
-                              c.toLowerCase().includes(searchQuery.toLowerCase())
-                                )
-                            ).map((c) => (
-                              <Combobox.Option
-                                key={c}
-                                value={c}
-                                className={({ active }) =>
-                                  `cursor-pointer select-none px-3 py-2 text-sm ${
-                                    active
-                                      ? "bg-green-500/20 text-green-400"
-                                      : "text-white"
-                                  }`
-                                }
-                              >
-                                {c}
-                              </Combobox.Option>
-                            ))}
-                          </Combobox.Options>
+                      
+                      {(rule.condition === "contains" || rule.condition === "equals") && (
+                        <div className="md:col-span-3">
+                          <div className="text-sm text-white/70 mb-3">Search Terms</div>
+                          <TokensInput
+                            tokens={rule.tokens}
+                            setTokens={(arr) => updateLineTokens(index, arr)}
+                            pendingText={rule.pendingText || ""}
+                            setPendingText={(txt) => updateLinePendingText(index, txt)}
+                            tableName={selectedTable.id}
+                            column={rule.column}
+                          />
                         </div>
-                      </Combobox>
-                    </div>
-                    
-                    <div>
-                      <div className="text-xs text-neutral-400 mb-2">Condition</div>
-                      <select
-                        value={rule.condition}
-                        onChange={(e) =>
-                          updateFilterLine(index, "condition", e.target.value)
-                        }
-                        className="w-full bg-[#252525] border border-[#404040] rounded-md py-2 px-3 text-sm text-white"
-                      >
-                        <option value="contains">Contains</option>
-                        <option value="equals">Equals</option>
-                        <option value="is empty">Is Empty</option>
-                        <option value="is not empty">Is Not Empty</option>
-                      </select>
-                    </div>
-                    
-                    {(rule.condition === "contains" || rule.condition === "equals") && (
-                      <div className="md:col-span-3">
-                        <div className="text-xs text-neutral-400 mb-2">Search Terms</div>
-                        <TokensInput
-                          tokens={rule.tokens}
-                          setTokens={(arr) => updateLineTokens(index, arr)}
-                          pendingText={rule.pendingText || ""}
-                          setPendingText={(txt) => updateLinePendingText(index, txt)}
-                          tableName={selectedTable.id}
-                          column={rule.column}
-                        />
+                      )}
+                      
+                      <div className="md:col-span-3 flex justify-end">
+                        <button 
+                          onClick={() => removeFilterLine(index)}
+                          className="px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm rounded-lg border border-red-500/20 transition-all duration-200"
+                        >
+                          Remove Rule
+                        </button>
                       </div>
-                    )}
-                    
-                    <div className="md:col-span-3 flex justify-end">
-                      <button 
-                        onClick={() => removeFilterLine(index)}
-                        className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-sm rounded-md border border-red-500/30"
-                      >
-                        Remove Rule
-                      </button>
                     </div>
                   </div>
-                </div>
-              ))}
-              
-              <div className="flex gap-3">
-                <button
-                  onClick={addFilterLine}
-                  className="px-4 py-2 bg-[#252525] hover:bg-[#303030] text-white text-sm rounded-md border border-[#404040] flex items-center gap-2"
-                >
-                  <span>+</span> Add Rule
-                </button>
+                ))}
                 
-                <button 
-                  onClick={applyFilters}
-                  className="px-6 py-2 bg-green-500 hover:bg-green-600 text-black font-semibold text-sm rounded-md ml-auto"
-                >
-                  Apply Filters
-                </button>
+                <div className="flex gap-4">
+                  <button
+                    onClick={addFilterLine}
+                    className="px-5 py-2.5 bg-white/5 hover:bg-white/10 backdrop-blur-sm text-white text-sm rounded-lg border border-white/10 flex items-center gap-2 transition-all duration-200"
+                  >
+                    <span>+</span> Add Rule
+                  </button>
+                  
+                  <button 
+                    onClick={applyFilters}
+                    className="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold text-sm rounded-lg ml-auto transition-all duration-200"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
               </div>
-            </div>
-          </div>
-
-          {/* Active Filter Badges */}
-          {filters.length > 0 && (
-            <div className="mb-6 flex flex-wrap gap-2">
-              {filters.map((f, i) => {
-                const prefix = i === 0 ? "Where" : f.subop || "AND";
-                const safeTokens = Array.isArray(f.tokens) ? f.tokens : [];
-                let desc = "";
-                if (f.condition === "is empty" || f.condition === "is not empty") {
-                  desc = f.condition;
-                } else {
-                  desc = `${f.condition} [${safeTokens.join(", ")}]`;
-                }
-                return (
-                  <div key={i} className="bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs px-3 py-2 rounded-md">
-                    <span>
-                      <strong>{prefix}</strong> {f.column} {desc}
-                    </span>
-                  </div>
-                );
-              })}
             </div>
           )}
 
           {/* Loading state for user settings */}
           {!userSettingsLoaded && (
-            <div className="mt-6 text-sm text-neutral-400">Loading user settings...</div>
+            <div className="mt-8 text-sm text-white/70">Loading user settings...</div>
           )}
 
           {/* Results Table */}
           {userSettingsLoaded && (
-            <div className="bg-[#252525] border border-[#333333] rounded-lg overflow-hidden">
-              <div className="px-4 py-4 border-b border-[#333333] flex items-center justify-between">
-                <h3 className="font-semibold text-white">Search Results</h3>
+            <div className="bg-white/5 backdrop-blur-sm rounded-2xl overflow-hidden max-w-6xl mx-auto">
+              <div className="px-6 py-5 flex items-center justify-between">
+                <h3 className="font-semibold text-lg text-white">Search Results</h3>
                 {filters.length > 0 && (
-                  <span className="text-sm text-neutral-400">
+                  <span className="text-sm text-white/70">
                     Page {page + 1} of {totalPages}
                   </span>
                 )}
               </div>
               
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.1) transparent' }}>
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-[#2a2a2a] border-b border-[#333333]">
+                    <tr className="bg-white/10 backdrop-blur-sm border-b border-[#333333]">
                       {visibleColumns.map((col) => (
                         <th
                           key={col}
-                          className="relative group py-3 px-4 text-sm font-semibold text-neutral-300 text-left"
+                          className="relative group py-4 px-6 text-sm font-semibold text-white/80 text-left first:pl-6 last:pr-6 border-0"
                           style={{
                             width: columnWidths[col] || "auto",
                             minWidth: "150px",
@@ -1363,7 +1383,7 @@ export default function ManualSearchClone({
                           <div className="flex items-center justify-between">
                             <span>{col}</span>
                             <div
-                              className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#404040] opacity-0 group-hover:opacity-100"
+                              className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
                               onMouseDown={(e) => {
                                 e.preventDefault();
                                 const startX = e.pageX;
@@ -1401,22 +1421,22 @@ export default function ManualSearchClone({
                   <tbody>
                     {rowsLoading
                       ? Array.from({ length: limit }).map((_, i) => (
-                          <tr key={i} className="animate-pulse border-b border-[#333333]">
+                          <tr key={i} className={`animate-pulse ${i % 2 === 0 ? 'bg-[#252525]' : 'bg-[#1e1e1e]'}`}>
                             {visibleColumns.map((c) => (
-                              <td key={c} className="py-3 px-4">
-                                <div className="h-4 bg-[#303030] rounded w-full" />
+                              <td key={c} className="py-4 px-6 first:pl-6 last:pr-6 border-0">
+                                <div className="h-4 bg-white/10 rounded-lg w-full" />
                               </td>
                             ))}
                           </tr>
                         ))
                       : results.map((row, i) => (
-                          <tr key={i} className="border-b border-[#333333] hover:bg-[#2a2a2a] transition-colors">
+                          <tr key={i} className={`hover:bg-[#333333]/40 transition-all duration-200 ${i % 2 === 0 ? 'bg-[#252525]' : 'bg-[#1e1e1e]'}`}>
                             {visibleColumns.map((c) => (
                               <td
                                 key={c}
-                                className="py-3 px-4 text-sm text-white"
+                                className="py-4 px-6 text-sm text-white/90 first:pl-6 last:pr-6 border-0"
                               >
-                                <div className="truncate">{row[c]}</div>
+                                <div className="truncate font-medium">{row[c]}</div>
                               </td>
                             ))}
                           </tr>
@@ -1426,19 +1446,19 @@ export default function ManualSearchClone({
               </div>
 
               {/* Pagination */}
-              <div className="px-4 py-4 border-t border-[#333333] flex items-center justify-between">
-                <div className="text-sm text-neutral-400">
+              <div className="px-6 py-5 flex items-center justify-between">
+                <div className="text-sm text-white/70">
                   {results.length > 0 ? (
                     <>Showing {results.length} of {formatNumber(matchingCount)} results</>
                   ) : (
                     <>No results found</>
                   )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                   <button 
                     onClick={prevPage} 
                     disabled={page === 0}
-                    className={`px-4 py-2 text-sm rounded-md border font-medium ${page === 0 ? 'bg-[#252525] text-neutral-500 border-[#333333] cursor-not-allowed' : 'bg-[#252525] hover:bg-[#303030] text-white border-[#404040]'}`}
+                    className={`px-5 py-2.5 text-sm rounded-lg font-medium transition-all duration-200 ${page === 0 ? 'bg-white/5 text-white/30 border-white/10 cursor-not-allowed' : 'bg-white/5 hover:bg-white/10 backdrop-blur-sm text-white border-white/10 hover:border-white/20'}`}
                   >
                     Previous
                   </button>
@@ -1451,14 +1471,14 @@ export default function ManualSearchClone({
                         tokensTotal !== null && tokensTotal <= 201 ? 4 : 24
                       )
                     }
-                    className={`px-4 py-2 text-sm rounded-md border font-medium ${
+                    className={`px-5 py-2.5 text-sm rounded-lg font-medium transition-all duration-200 ${
                       page >=
                       Math.min(
                         totalPages - 1,
                         tokensTotal !== null && tokensTotal <= 201 ? 4 : 24
                       )
-                        ? 'bg-[#252525] text-neutral-500 border-[#333333] cursor-not-allowed'
-                        : 'bg-[#252525] hover:bg-[#303030] text-white border-[#404040]'
+                        ? 'bg-white/5 text-white/30 border-white/10 cursor-not-allowed'
+                        : 'bg-white/5 hover:bg-white/10 backdrop-blur-sm text-white border-white/10 hover:border-white/20'
                     }`}
                   >
                     Next
@@ -1468,6 +1488,7 @@ export default function ManualSearchClone({
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

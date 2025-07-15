@@ -487,7 +487,7 @@ function SearchApp() {
       <Navbar />
       
       {/* Global Guide component */}
-      {!manualMode && getGuideContent() && currentStep !== 3 && (
+      {!manualMode && getGuideContent() && currentStep !== 3 && resultsCount === 0 && (
         <Guide 
           isVisible={true}
           defaultOpen={guideOpen}
@@ -498,21 +498,14 @@ function SearchApp() {
       
       {/* UI overlay elements that don't affect layout */}
       <div className="absolute top-0 right-0 bottom-0 left-0 pointer-events-none">
-        {/* AI Status Badge - single badge showing current status */}
-        {!manualMode && currentStep < 3 && (
+        {/* AI Status Badge - shown only while processing or before results */}
+        {!manualMode && currentStep < 3 && isAiProcessing && (
           <div className="fixed top-20 left-4 z-10 pointer-events-auto">
-            {/* AI Status Badge */}
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ type: "spring", stiffness: 300, damping: 25 }}
-              className={`px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 ${
-                isAiProcessing
-                  ? "bg-blue-500/20 text-blue-300 border border-blue-500/30"
-                  : resultsCount > 0
-                  ? "bg-green-500/20 text-green-300 border border-green-500/30"
-                  : "bg-neutral-500/20 text-neutral-400 border border-neutral-500/30"
-              }`}
+              className="px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 bg-blue-500/20 text-blue-300 border border-blue-500/30"
             >
               {isAiProcessing && (
                 <div className="w-3 h-3 border-2 border-t-transparent border-blue-300 rounded-full animate-spin"></div>
