@@ -124,13 +124,13 @@ function TokensInput({
   return (
     <div className="relative">
       {/* Display existing tokens */}
-      <div className="flex flex-wrap gap-2 mb-2">
+      <div className="flex flex-wrap gap-2 mb-3">
         {tokens.map((token, idx) => (
-          <div key={idx} className="bg-blue-600/10 border border-blue-500/20 text-blue-500 text-sm px-2 py-1 rounded-md flex items-center gap-2">
+          <div key={idx} className="bg-blue-600/10 text-blue-400 text-sm px-3 py-1.5 rounded-lg flex items-center gap-2">
             <span>{token}</span>
             <button
               onClick={() => removeToken(token)}
-              className="text-blue-500 hover:text-blue-700"
+              className="text-blue-400 hover:text-blue-300 transition-colors"
             >
               ×
             </button>
@@ -147,20 +147,20 @@ function TokensInput({
           onFocus={handleFocus}
           onBlur={handleBlur}
         placeholder="Search (Enter to add new)"
-        className="w-full bg-[#212121] border border-[#404040] rounded-md px-3 py-2 text-white placeholder:text-neutral-600 focus:outline-none focus:border-green-500"
+        className="w-full bg-[#2a2a2a] border border-[#404040] rounded-lg px-3 py-2.5 text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
         />
 
       {/* Suggestions dropdown */}
       {showSuggestions && (
         <div
           ref={dropdownRef}
-          className="absolute z-10 mt-1 w-full bg-[#252525] border border-[#404040] rounded-md shadow-md max-h-48 overflow-auto"
+          className="absolute z-10 mt-1 w-full bg-[#2a2a2a] border border-[#404040] rounded-lg shadow-lg max-h-48 overflow-auto"
         >
           {isFetching ? (
-            <div className="p-3 text-sm text-neutral-400 flex items-center gap-2">
+            <div className="p-3 text-sm text-gray-400 flex items-center gap-2">
               {/* Simple loading spinner */}
               <svg
-                className="h-4 w-4 animate-spin mr-2 text-neutral-500"
+                className="h-4 w-4 animate-spin mr-2 text-gray-400"
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
@@ -189,13 +189,13 @@ function TokensInput({
                   e.preventDefault(); // Prevent losing focus
                   addToken(item);
                 }}
-                className="px-3 py-2 cursor-pointer hover:bg-[#333333] text-sm text-white"
+                className="px-3 py-2 cursor-pointer hover:bg-[#333333] text-sm text-gray-300 transition-colors"
               >
                 {item}
               </div>
             ))
           ) : (
-            <div className="p-3 text-sm text-neutral-400">
+            <div className="p-3 text-sm text-gray-400">
               No suggestions found.
             </div>
           )}
@@ -284,7 +284,7 @@ export default function ManualSearchClone({
     }
   }, [matchingCount, onResultsCountChange]);
 
-  // Function to show filter section and initialize with empty filter if needed
+  // Function to show filter modal and initialize with empty filter if needed
   function toggleFilterSection() {
     if (!showFilterSection && pendingFilters.length === 0) {
       // Make a copy so we can discard changes if user cancels
@@ -297,24 +297,24 @@ export default function ManualSearchClone({
       }])));
     }
     setShowFilterSection(!showFilterSection);
-    // Close other sections
+    // Close other modals
     setShowColumnSelector(false);
     setShowExportSection(false);
   }
   
-  // Toggle column selector
+  // Toggle column selector modal
   function toggleColumnSelector() {
     setColumnSearch("");
     setShowColumnSelector(!showColumnSelector);
-    // Close other sections
+    // Close other modals
     setShowFilterSection(false);
     setShowExportSection(false);
   }
   
-  // Toggle export section
+  // Toggle export modal
   function toggleExportSection() {
     setShowExportSection(!showExportSection);
-    // Close other sections
+    // Close other modals
     setShowFilterSection(false);
     setShowColumnSelector(false);
   }
@@ -335,6 +335,26 @@ export default function ManualSearchClone({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [tableDropdownRef]);
+
+  // Handle escape key to close modals
+  useEffect(() => {
+    function handleEscapeKey(e) {
+      if (e.key === "Escape") {
+        if (showColumnSelector) {
+          setShowColumnSelector(false);
+        } else if (showExportSection) {
+          setShowExportSection(false);
+        } else if (showFilterSection) {
+          setShowFilterSection(false);
+        }
+      }
+    }
+    
+    document.addEventListener("keydown", handleEscapeKey);
+    return () => {
+      document.removeEventListener("keydown", handleEscapeKey);
+    };
+  }, [showColumnSelector, showExportSection, showFilterSection]);
 
   // On mount, fetch user tokens_total
   useEffect(() => {
@@ -1027,14 +1047,6 @@ export default function ManualSearchClone({
               <ArrowLeftIcon className="h-4 w-4 text-neutral-300" />
             </button>
           )}
-          <span className="text-sm text-neutral-300">
-            {countLoading ? (
-              <span className="inline-block w-16 bg-[#303030] h-5 rounded animate-pulse" />
-            ) : (
-              `${formatNumber(matchingCount)} results`
-            )}
-          </span>
-          <span className="text-sm text-neutral-500">| {selectedTable.name}</span>
         </div>
  
         {/* Right side controls */}
@@ -1067,8 +1079,8 @@ export default function ManualSearchClone({
             />
           </button>
 
-          {/* Active Filter Badges (blue tags) - show only when filters panel open */}
-          {showFilterSection && filters.length > 0 && (
+          {/* Active Filter Badges (blue tags) - show when filters exist */}
+          {filters.length > 0 && (
             <div className="flex flex-wrap gap-2 ml-2">
               {filters.map((f, i) => {
                 const prefix = i === 0 ? "Where" : f.subop || "AND";
@@ -1094,272 +1106,18 @@ export default function ManualSearchClone({
  
       {/* Main Search Interface */}
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Left Sidebar: only visible when column selector or export panel is open */}
-        <div className={`lg:w-80 flex-shrink-0 ${!(showColumnSelector || showExportSection) ? 'hidden' : ''}`}>
-          <div className="bg-[#252525] border border-[#333333] rounded-lg overflow-hidden">
-             {/* Sidebar no longer shows top-level buttons; contents rendered below if toggled */}
-
-            {/* Dynamic Content Section */}
-            <div className="max-h-96 overflow-y-auto">
-              {/* Column Selection Section */}
-              {showColumnSelector && (
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="font-semibold text-lg text-white">Column Selection</h3>
-                  </div>
-                  
-                  <div className="mb-6">
-                    <input
-                      type="text"
-                      placeholder="Search columns..."
-                      value={columnSearch}
-                      onChange={(e) => setColumnSearch(e.target.value)}
-                      className="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/50 focus:outline-none focus:border-white/30 transition-all duration-200"
-                    />
-                  </div>
-                  
-                  <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-3 mb-6">
-                    {filteredAvailableColumns.map((col) => (
-                      <label key={col} className="flex items-center gap-3 cursor-pointer py-3 px-3 hover:bg-white/5 rounded-lg transition-all duration-200">
-                        <input
-                          type="checkbox"
-                          checked={visibleColumns.includes(col)}
-                          onChange={() => toggleColumn(col)}
-                          className="h-4 w-4 accent-blue-500 rounded"
-                        />
-                        <span className="text-sm text-white">{col}</span>
-                      </label>
-                    ))}
-                  </div>
-                  
-                  <button 
-                    onClick={closeColumnSelectorModal}
-                    className="w-full px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold text-sm rounded-xl transition-all duration-200"
-                  >
-                    Apply Changes
-                  </button>
-                </div>
-              )}
-              
-              {/* Export Section */}
-              {showExportSection && (
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="font-semibold text-lg text-white">Export Data</h3>
-                  </div>
-                  
-                  {exporting ? (
-                    <div>
-                      <div className="w-full bg-white/10 h-2 rounded-full mb-4 overflow-hidden">
-                        <div
-                          className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                          style={{ width: `${exportProgress}%` }}
-                        />
-                      </div>
-                      <div className="text-sm text-white/70 text-center">
-                        {exportProgress}% Complete
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <p className="text-sm text-white/70 mb-6">
-                        Choose how many rows to export. You'll be charged 1 token per
-                        row, but only if the export completes successfully.
-                      </p>
-                      
-                      <div className="mb-6">
-                        <div className="text-sm text-white/70 mb-3">Rows to Export</div>
-                        <input
-                          type="number"
-                          value={rowsToExport === null ? "" : rowsToExport}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setRowsToExport(val === "" ? null : Number(val));
-                          }}
-                          min="1"
-                          className="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/50 focus:outline-none focus:border-white/30 transition-all duration-200"
-                        />
-                      </div>
-                      
-                      {exportError && (
-                        <div className="mb-4 text-sm text-red-400">{exportError}</div>
-                      )}
-                      
-                      <button
-                        onClick={startExport}
-                        className="w-full px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold text-sm rounded-xl transition-all duration-200"
-                      >
-                        Start Export
-                      </button>
-                    </>
-                  )}
-                  
-                  {exportDone && (
-                    <p className="mt-4 text-sm text-blue-400">
-                      Export completed successfully!
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        {/* Left Sidebar removed - all panels now modals */}
         
         {/* Main Content Area */}
         <div className="flex-1 min-w-0">
-          {/* Filter Section */}
-          {showFilterSection && (
-            <div className="mb-8 bg-white/5 backdrop-blur-sm rounded-2xl overflow-hidden border border-white/10">
-              <div className="px-6 py-5 border-b border-white/10">
-                <h3 className="font-semibold text-lg text-white">Filter Settings</h3>
-              </div>
-              
-              <div className="p-6 space-y-6">
-                {pendingFilters.map((rule, index) => (
-                  <div
-                    key={index}
-                    className="bg-white/5 backdrop-blur-sm p-6 rounded-xl border border-white/10"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      {index > 0 && (
-                        <div className="md:col-span-3">
-                          <div className="text-sm text-white/70 mb-3">Operator</div>
-                          <select
-                            value={rule.subop}
-                            onChange={(e) => updateLineSubop(index, e.target.value)}
-                            className="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl py-3 px-4 text-sm text-white focus:outline-none focus:border-white/30 transition-all duration-200"
-                          >
-                            <option value="AND">AND</option>
-                            <option value="OR">OR</option>
-                          </select>
-                        </div>
-                      )}
-                      
-                      <div>
-                        <div className="text-sm text-white/70 mb-3">Column</div>
-                        <Combobox
-                          value={rule.column}
-                          onChange={(val) => updateFilterLine(index, "column", val)}
-                        >
-                          <div className="relative w-full">
-                            <Combobox.Button
-                              className="relative w-full border border-white/10 bg-white/5 backdrop-blur-sm text-white text-left rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-white/30 transition-all duration-200"
-                            >
-                              <Combobox.Input
-                                onChange={(e) => {
-                                  setSearchQuery(e.target.value);
-                                  updateFilterLine(index, "column", e.target.value);
-                                }}
-                                displayValue={(val) => val}
-                                placeholder="Select column..."
-                                className="w-full bg-transparent focus:outline-none"
-                              />
-                              <span className="absolute inset-y-0 right-0 flex items-center pr-2">
-                                <ChevronUpDownIcon
-                                  className="h-5 w-5 text-white/50"
-                                  aria-hidden="true"
-                                />
-                              </span>
-                            </Combobox.Button>
-                            <Combobox.Options
-                              className="absolute z-10 mt-1 w-full bg-white/10 backdrop-blur-sm border border-white/10 rounded-xl max-h-40 overflow-auto custom-scrollbar"
-                            >
-                              {(!searchQuery
-                                ? availableColumns
-                                : availableColumns.filter((c) =>
-                                c.toLowerCase().includes(searchQuery.toLowerCase())
-                                  )
-                              ).map((c) => (
-                                <Combobox.Option
-                                  key={c}
-                                  value={c}
-                                  className={({ active }) =>
-                                    `cursor-pointer select-none px-3 py-2 text-sm ${
-                                      active
-                                        ? "bg-blue-500/20 text-blue-400"
-                                        : "text-white"
-                                    }`
-                                  }
-                                >
-                                  {c}
-                                </Combobox.Option>
-                              ))}
-                            </Combobox.Options>
-                          </div>
-                        </Combobox>
-                      </div>
-                      
-                      <div>
-                        <div className="text-sm text-white/70 mb-3">Condition</div>
-                        <select
-                          value={rule.condition}
-                          onChange={(e) =>
-                            updateFilterLine(index, "condition", e.target.value)
-                          }
-                          className="w-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl py-3 px-4 text-sm text-white focus:outline-none focus:border-white/30 transition-all duration-200"
-                        >
-                          <option value="contains">Contains</option>
-                          <option value="equals">Equals</option>
-                          <option value="is empty">Is Empty</option>
-                          <option value="is not empty">Is Not Empty</option>
-                        </select>
-                      </div>
-                      
-                      {(rule.condition === "contains" || rule.condition === "equals") && (
-                        <div className="md:col-span-3">
-                          <div className="text-sm text-white/70 mb-3">Search Terms</div>
-                          <TokensInput
-                            tokens={rule.tokens}
-                            setTokens={(arr) => updateLineTokens(index, arr)}
-                            pendingText={rule.pendingText || ""}
-                            setPendingText={(txt) => updateLinePendingText(index, txt)}
-                            tableName={selectedTable.id}
-                            column={rule.column}
-                          />
-                        </div>
-                      )}
-                      
-                      <div className="md:col-span-3 flex justify-end">
-                        <button 
-                          onClick={() => removeFilterLine(index)}
-                          className="px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm rounded-lg border border-red-500/20 transition-all duration-200"
-                        >
-                          Remove Rule
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                
-                <div className="flex gap-4">
-                  <button
-                    onClick={addFilterLine}
-                    className="px-5 py-2.5 bg-white/5 hover:bg-white/10 backdrop-blur-sm text-white text-sm rounded-lg border border-white/10 flex items-center gap-2 transition-all duration-200"
-                  >
-                    <span>+</span> Add Rule
-                  </button>
-                  
-                  <button 
-                    onClick={applyFilters}
-                    className="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold text-sm rounded-lg ml-auto transition-all duration-200"
-                  >
-                    Apply Filters
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Loading state for user settings */}
-          {!userSettingsLoaded && (
-            <div className="mt-8 text-sm text-white/70">Loading user settings...</div>
-          )}
 
           {/* Results Table */}
           {userSettingsLoaded && (
             <div className="bg-white/5 backdrop-blur-sm rounded-2xl overflow-hidden max-w-6xl mx-auto">
               <div className="px-6 py-5 flex items-center justify-between">
-                <h3 className="font-semibold text-lg text-white">Search Results</h3>
+                <h3 className="font-semibold text-lg text-white">
+                  {countLoading ? 'Loading…' : `${formatNumber(matchingCount)} results | ${selectedTable.name}`}
+                </h3>
                 {filters.length > 0 && (
                   <span className="text-sm text-white/70">
                     Page {page + 1} of {totalPages}
@@ -1490,6 +1248,323 @@ export default function ManualSearchClone({
         </div>
       </div>
       </div>
+
+      {/* Column Selection Modal */}
+      {showColumnSelector && (
+        <>
+          {/* Semi-transparent overlay */}
+          <div className="fixed inset-0 bg-black/60 z-40" />
+          
+          <div 
+            className="fixed inset-0 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowColumnSelector(false)}
+          >
+            <div 
+              className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <h3 className="font-medium text-lg text-white mb-2">Column Selection</h3>
+                <p className="text-sm text-gray-400 mb-6">
+                  Select which columns to display in your results table.
+                </p>
+                
+                <div className="mb-6">
+                  <input
+                    type="text"
+                    placeholder="Search columns..."
+                    value={columnSearch}
+                    onChange={(e) => setColumnSearch(e.target.value)}
+                    className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
+                  />
+                </div>
+                
+                <div className="max-h-60 overflow-y-auto space-y-1 mb-6">
+                  {filteredAvailableColumns.map((col) => (
+                    <label key={col} className="flex items-center gap-3 cursor-pointer py-3 px-4 hover:bg-[#333333] rounded-lg transition-all duration-200">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.includes(col)}
+                        onChange={() => toggleColumn(col)}
+                        className="h-4 w-4 accent-blue-500 rounded"
+                      />
+                      <span className="text-sm text-gray-300">{col}</span>
+                    </label>
+                  ))}
+                </div>
+                
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setShowColumnSelector(false)}
+                    className="flex-1 px-4 py-3 bg-[#404040] hover:bg-[#4a4a4a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={closeColumnSelectorModal}
+                    className="flex-1 px-4 py-3 bg-[#505050] hover:bg-[#5a5a5a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                  >
+                    Apply Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Export Data Modal */}
+      {showExportSection && (
+        <>
+          {/* Semi-transparent overlay */}
+          <div className="fixed inset-0 bg-black/60 z-40" />
+          
+          <div 
+            className="fixed inset-0 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowExportSection(false)}
+          >
+            <div 
+              className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <h3 className="font-medium text-lg text-white mb-2">Export Data</h3>
+                
+                {exporting ? (
+                  <div className="text-center py-4">
+                    <div className="w-full bg-[#404040] h-2 rounded-full mb-4 overflow-hidden">
+                      <div
+                        className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                        style={{ width: `${exportProgress}%` }}
+                      />
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      {exportProgress}% Complete
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-400 mb-6 leading-relaxed">
+                      Choose how many rows to export. You'll be charged 1 token per
+                      row, but only if the export completes successfully.
+                    </p>
+                    
+                    <div className="mb-6">
+                      <div className="text-sm text-gray-300 mb-3">Amount</div>
+                      <input
+                        type="number"
+                        value={rowsToExport === null ? "" : rowsToExport}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setRowsToExport(val === "" ? null : Number(val));
+                        }}
+                        min="1"
+                        placeholder="0.00"
+                        className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
+                      />
+                    </div>
+                    
+                    {exportError && (
+                      <div className="mb-6 text-sm text-red-400 bg-red-500/10 rounded-lg px-4 py-3">
+                        {exportError}
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-3">
+                      <button 
+                        onClick={() => setShowExportSection(false)}
+                        className="flex-1 px-4 py-3 bg-[#404040] hover:bg-[#4a4a4a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={startExport}
+                        className="flex-1 px-4 py-3 bg-[#505050] hover:bg-[#5a5a5a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                      >
+                        Export
+                      </button>
+                    </div>
+                  </>
+                )}
+                
+                {exportDone && (
+                  <div className="mt-6 text-sm text-green-400 bg-green-500/10 rounded-lg px-4 py-3 text-center">
+                    Export completed successfully!
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Filters Modal */}
+      {showFilterSection && (
+        <>
+          {/* Semi-transparent overlay */}
+          <div className="fixed inset-0 bg-black/60 z-40" />
+          
+          <div 
+            className="fixed inset-0 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowFilterSection(false)}
+          >
+            <div 
+              className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-2xl w-full max-w-4xl max-h-[80vh] overflow-hidden shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <h3 className="font-medium text-lg text-white mb-2">Filter Settings</h3>
+                <p className="text-sm text-gray-400 mb-6">
+                  Create rules to filter your search results.
+                </p>
+                
+                <div className="max-h-[60vh] overflow-y-auto pr-2">
+                  <div className="space-y-4">
+                    {pendingFilters.map((rule, index) => (
+                      <div
+                        key={index}
+                        className="bg-[#1a1a1a] border border-[#404040] p-6 rounded-lg"
+                      >
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {index > 0 && (
+                            <div className="md:col-span-3">
+                              <div className="text-sm text-gray-300 mb-3">Operator</div>
+                              <select
+                                value={rule.subop}
+                                onChange={(e) => updateLineSubop(index, e.target.value)}
+                                className="w-full bg-[#2a2a2a] border border-[#404040] rounded-lg py-3 px-4 text-sm text-white focus:outline-none focus:border-[#505050] transition-all duration-200"
+                              >
+                                <option value="AND">AND</option>
+                                <option value="OR">OR</option>
+                              </select>
+                            </div>
+                          )}
+                          
+                          <div>
+                            <div className="text-sm text-gray-300 mb-3">Column</div>
+                            <Combobox
+                              value={rule.column}
+                              onChange={(val) => updateFilterLine(index, "column", val)}
+                            >
+                              <div className="relative w-full">
+                                <Combobox.Button
+                                  className="relative w-full bg-[#2a2a2a] border border-[#404040] text-white text-left rounded-lg py-3 px-4 text-sm focus:outline-none focus:border-[#505050] transition-all duration-200"
+                                >
+                                  <Combobox.Input
+                                    onChange={(e) => {
+                                      setSearchQuery(e.target.value);
+                                      updateFilterLine(index, "column", e.target.value);
+                                    }}
+                                    displayValue={(val) => val}
+                                    placeholder="Select column..."
+                                    className="w-full bg-transparent focus:outline-none text-white placeholder:text-gray-500"
+                                  />
+                                  <span className="absolute inset-y-0 right-0 flex items-center pr-3">
+                                    <ChevronUpDownIcon
+                                      className="h-4 w-4 text-gray-400"
+                                      aria-hidden="true"
+                                    />
+                                  </span>
+                                </Combobox.Button>
+                                <Combobox.Options
+                                  className="absolute z-10 mt-1 w-full bg-[#2a2a2a] border border-[#404040] rounded-lg max-h-40 overflow-auto shadow-lg"
+                                >
+                                  {(!searchQuery
+                                    ? availableColumns
+                                    : availableColumns.filter((c) =>
+                                    c.toLowerCase().includes(searchQuery.toLowerCase())
+                                      )
+                                  ).map((c) => (
+                                    <Combobox.Option
+                                      key={c}
+                                      value={c}
+                                      className={({ active }) =>
+                                        `cursor-pointer select-none px-4 py-3 text-sm ${
+                                          active
+                                            ? "bg-[#333333] text-white"
+                                            : "text-gray-300"
+                                        }`
+                                      }
+                                    >
+                                      {c}
+                                    </Combobox.Option>
+                                  ))}
+                                </Combobox.Options>
+                              </div>
+                            </Combobox>
+                          </div>
+                          
+                          <div>
+                            <div className="text-sm text-gray-300 mb-3">Condition</div>
+                            <select
+                              value={rule.condition}
+                              onChange={(e) =>
+                                updateFilterLine(index, "condition", e.target.value)
+                              }
+                              className="w-full bg-[#2a2a2a] border border-[#404040] rounded-lg py-3 px-4 text-sm text-white focus:outline-none focus:border-[#505050] transition-all duration-200"
+                            >
+                              <option value="contains">Contains</option>
+                              <option value="equals">Equals</option>
+                              <option value="is empty">Is Empty</option>
+                              <option value="is not empty">Is Not Empty</option>
+                            </select>
+                          </div>
+                          
+                          {(rule.condition === "contains" || rule.condition === "equals") && (
+                            <div className="md:col-span-3">
+                              <div className="text-sm text-gray-300 mb-3">Search Terms</div>
+                              <TokensInput
+                                tokens={rule.tokens}
+                                setTokens={(arr) => updateLineTokens(index, arr)}
+                                pendingText={rule.pendingText || ""}
+                                setPendingText={(txt) => updateLinePendingText(index, txt)}
+                                tableName={selectedTable.id}
+                                column={rule.column}
+                              />
+                            </div>
+                          )}
+                          
+                          <div className="md:col-span-3 flex justify-end">
+                            <button 
+                              onClick={() => removeFilterLine(index)}
+                              className="px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-sm rounded-lg transition-all duration-200"
+                            >
+                              Remove Rule
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    <div className="flex gap-3 pt-4">
+                      <button
+                        onClick={addFilterLine}
+                        className="px-4 py-3 bg-[#404040] hover:bg-[#4a4a4a] text-white text-sm rounded-lg flex items-center gap-2 transition-all duration-200"
+                      >
+                        <span>+</span> Add Rule
+                      </button>
+                      
+                      <button 
+                        onClick={() => setShowFilterSection(false)}
+                        className="px-4 py-3 bg-[#404040] hover:bg-[#4a4a4a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                      >
+                        Cancel
+                      </button>
+                      
+                      <button 
+                        onClick={applyFilters}
+                        className="px-4 py-3 bg-[#505050] hover:bg-[#5a5a5a] text-white font-medium text-sm rounded-lg ml-auto transition-all duration-200"
+                      >
+                        Apply Filters
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 } 
