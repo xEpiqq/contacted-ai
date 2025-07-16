@@ -43,33 +43,10 @@ const { setExportsDrawerOpen, setDrawerOpen, setCreditsScreenOpen, isExtensionLo
     if (onAiProcessingChange) onAiProcessingChange(true);
     if (onAiStatusChange) onAiStatusChange("Thinking...");
     
-    /* =====================================================================
-       DUMMY API OVERRIDE — BEGIN
-       ---------------------------------------------------------------------
-       This entire block fakes an AI response so you can work offline.
-       • Remove (or comment out) **everything between the BEGIN/END markers**
-         AND delete the `return;` statement that follows to re-enable the
-         real `/api/ai/test-clone` request below.
-    ===================================================================== */
-    setTimeout(() => {
-      const dummyResults = {
-        jobTitles: ["Software Engineer"],
-        industryKeywords: ["Software"],
-        locationInfo: { hasLocation: false, components: {} },
-        hasAdditionalFilters: false,
-        additionalFilters: []
-      };
-      setApiResults(dummyResults);
-      setIsLoading(false);
-      if (onAiStatusChange) onAiStatusChange("Search");
-      if (onAiProcessingChange) onAiProcessingChange(false);
-    }, 300);
-    return; // <-- DELETE THIS LINE when restoring real API flow
-
-    /* ---------------- REAL API CALL (currently commented) ----------------
     try {
       // Call our consolidated API endpoint
       const response = await fetch('/api/ai/test-clone', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description: submissionText }),
       });
@@ -96,9 +73,6 @@ const { setExportsDrawerOpen, setDrawerOpen, setCreditsScreenOpen, isExtensionLo
       setIsLoading(false);
       if (onAiProcessingChange) onAiProcessingChange(false);
     }
-    ------------------------------------------------------------------------
-       DUMMY API OVERRIDE — END
-    ===================================================================== */
   }
 
   // Handle form submission for step 0
@@ -154,22 +128,7 @@ const { setExportsDrawerOpen, setDrawerOpen, setCreditsScreenOpen, isExtensionLo
     };
   }, [plusButtonRef]);
 
-  /* =====================================================================
-     AUTO-RUN DUMMY SEARCH EFFECT — BEGIN
-     ---------------------------------------------------------------------
-     Automatically submits the default "software engineers" query on mount
-     so the results overlay is shown immediately.
-     • Remove (or comment out) this entire effect **between BEGIN/END** to
-       restore the standard empty-state search workflow.
-  ===================================================================== */
-  useEffect(() => {
-    if (hasAutoSearchRun.current) return;
-    hasAutoSearchRun.current = true;
-    const defaultQuery = "software engineers";
-    setText(defaultQuery);
-    handleAISubmit(defaultQuery);
-  }, []);
-  /* ---------------- AUTO-RUN DUMMY SEARCH EFFECT — END ---------------- */
+
 
   return (
     <>
@@ -262,12 +221,24 @@ const { setExportsDrawerOpen, setDrawerOpen, setCreditsScreenOpen, isExtensionLo
                   </button>
                   <button 
                     type="button"
-                    onClick={() => setCreditsScreenOpen(true)}
                     className="tooltip px-4 py-2 rounded-full text-xs font-medium text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors flex items-center gap-2"
-                    data-tooltip="Purchase credits"
+                    data-tooltip="Switch to manual mode"
+                    onClick={() => {
+                      setManualMode(true);
+                      // Add an initial empty filter
+                      setPendingSearchFilters([{
+                        column: "",
+                        condition: "contains",
+                        tokens: [],
+                        pendingText: "",
+                        subop: ""
+                      }]);
+                      // Fetch initial results with no filters
+                      fetchSearchResults(0);
+                    }}
                   >
-                    <Gem className="h-4 w-4" />
-                    <span>Get Credits</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-list-filter"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg>
+                    <span>Manual</span>
                   </button>
                   <div className="relative" ref={plusButtonRef}>
                     <div className="flex items-center">
@@ -290,25 +261,16 @@ const { setExportsDrawerOpen, setDrawerOpen, setCreditsScreenOpen, isExtensionLo
                                 transition={{ duration: 0.15 }}
                               >
                                 <button 
-                                  className="tooltip px-4 py-2 rounded-full text-xs font-medium text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors flex items-center gap-2 whitespace-nowrap"
-                                  data-tooltip="Switch to manual mode"
+                                  type="button"
                                   onClick={() => {
-                                    setManualMode(true);
+                                    setCreditsScreenOpen(true);
                                     setShowPlusOptions(false);
-                                    // Add an initial empty filter
-                                    setPendingSearchFilters([{
-                                      column: "",
-                                      condition: "contains",
-                                      tokens: [],
-                                      pendingText: "",
-                                      subop: ""
-                                    }]);
-                                    // Fetch initial results with no filters
-                                    fetchSearchResults(0);
                                   }}
+                                  className="tooltip px-4 py-2 rounded-full text-xs font-medium text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors flex items-center gap-2 whitespace-nowrap"
+                                  data-tooltip="Purchase credits"
                                 >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-list-filter"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg>
-                                  <span>Manual</span>
+                                  <Gem className="h-4 w-4" />
+                                  <span>Get Credits</span>
                                 </button>
                                 <button 
                                   className={`tooltip px-4 py-2 rounded-full text-xs font-medium text-white bg-transparent border border-neutral-600 hover:bg-neutral-700/40 transition-colors flex items-center gap-2 whitespace-nowrap ${isExtensionLoading ? 'opacity-70 cursor-not-allowed' : ''}`}

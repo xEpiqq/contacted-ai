@@ -523,7 +523,7 @@ function SearchApp() {
       {/* Main content area with search or manual search */}
       <AnimatePresence mode="wait">
         {manualMode ? (
-          <ManualSearch />
+          <ManualSearch onBack={() => setManualMode(false)} />
         ) : (
           <main className={`flex-1 flex flex-col px-4 ${currentStep < 3 ? 'items-center mt-72' : 'mt-20'}`}>
             {/* Fixed position container for consistent input placement */}

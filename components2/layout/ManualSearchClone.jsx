@@ -213,7 +213,7 @@ export default function ManualSearchClone({
   onResultsCountChange = null,
   onBack = null // optional callback to return to search input view
 }) {
-  const { setFiltersDrawerOpen, setFilterDrawerData } = useSearchContext();
+  const { setFiltersDrawerOpen, setFilterDrawerData, setExportsDrawerOpen } = useSearchContext();
   // Table selection state
   const [selectedTable, setSelectedTable] = useState(() => {
     // If we have a recommended database, find it in our tables
@@ -1020,24 +1020,12 @@ export default function ManualSearchClone({
             />
           </button>
 
-          {/* Active Filter Badges (blue tags) - show when filters exist */}
+          {/* Filter Count Indicator - show when filters exist */}
                 {filters.length > 0 && (
-            <div className="flex flex-wrap gap-2 ml-2">
-              {filters.map((f, i) => {
-                const prefix = i === 0 ? "Where" : f.subop || "AND";
-                const safeTokens = Array.isArray(f.tokens) ? f.tokens : [];
-                let desc = "";
-                if (f.condition === "is empty" || f.condition === "is not empty") {
-                  desc = f.condition;
-                } else {
-                  desc = `${f.condition} [${safeTokens.join(", ")}]`;
-                }
-                return (
-                  <div key={i} className="bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs px-3 py-2 rounded-md whitespace-nowrap">
-                    <strong>{prefix}</strong> {f.column} {desc}
-                  </div>
-                );
-              })}
+            <div className="ml-2">
+              <div className="bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs px-3 py-2 rounded-md whitespace-nowrap">
+                {filters.length} Filter{filters.length !== 1 ? 's' : ''}
+              </div>
                   </div>
                 )}
               </div>
@@ -1135,7 +1123,9 @@ export default function ManualSearchClone({
                                 key={c}
                                 className="py-4 px-6 text-sm text-white/90 first:pl-6 last:pr-6 border-0"
                               >
-                                <div className="truncate font-medium">{row[c]}</div>
+                                <div className="truncate font-medium">
+                                  {row[c] && row[c].length > 40 ? `${row[c].substring(0, 40)}...` : row[c]}
+                                </div>
                               </td>
                             ))}
                           </tr>
@@ -1221,6 +1211,31 @@ export default function ManualSearchClone({
                   </div>
                   
                 <div className="max-h-60 overflow-y-auto space-y-1 mb-6">
+                    {/* Select All Option */}
+                    <label className="flex items-center gap-3 cursor-pointer py-3 px-4 hover:bg-[#333333] rounded-lg transition-all duration-200 border-b border-[#404040] mb-2">
+                                              <input
+                          type="checkbox"
+                          checked={visibleColumns.length === filteredAvailableColumns.length}
+                          onChange={() => {
+                            if (visibleColumns.length === filteredAvailableColumns.length) {
+                              // Deselect all
+                              setVisibleColumns([]);
+                            } else {
+                              // Select all - prioritize default columns first
+                              const defaultCols = selectedTable.defaultColumns.filter(col => 
+                                filteredAvailableColumns.includes(col)
+                              );
+                              const otherCols = filteredAvailableColumns.filter(col => 
+                                !selectedTable.defaultColumns.includes(col)
+                              );
+                              setVisibleColumns([...defaultCols, ...otherCols]);
+                            }
+                          }}
+                          className="h-4 w-4 accent-blue-500 rounded"
+                        />
+                      <span className="text-sm text-gray-300 font-medium">Select all</span>
+                    </label>
+                    
                     {filteredAvailableColumns.map((col) => (
                     <label key={col} className="flex items-center gap-3 cursor-pointer py-3 px-4 hover:bg-[#333333] rounded-lg transition-all duration-200">
                         <input
@@ -1291,7 +1306,10 @@ export default function ManualSearchClone({
                       </p>
                       
                     <div className="mb-6">
-                      <div className="text-sm text-gray-300 mb-3">Amount</div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-sm text-gray-300">Amount</div>
+                        <div className="text-xs text-gray-500">Max: 200K</div>
+                      </div>
                         <input
                           type="number"
                           value={rowsToExport === null ? "" : rowsToExport}
@@ -1300,6 +1318,7 @@ export default function ManualSearchClone({
                             setRowsToExport(val === "" ? null : Number(val));
                           }}
                           min="1"
+                          max="200000"
                         placeholder="0.00"
                         className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
                         />
@@ -1311,20 +1330,32 @@ export default function ManualSearchClone({
                       </div>
                       )}
                       
-                    <div className="flex gap-3">
-                      <button 
-                        onClick={() => setShowExportSection(false)}
-                        className="flex-1 px-4 py-3 bg-[#404040] hover:bg-[#4a4a4a] text-white font-medium text-sm rounded-lg transition-all duration-200"
-                      >
-                        Cancel
-                      </button>
+                    {!exportDone ? (
+                      <div className="flex gap-3">
+                        <button 
+                          onClick={() => setShowExportSection(false)}
+                          className="flex-1 px-4 py-3 bg-[#404040] hover:bg-[#4a4a4a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={startExport}
+                          className="flex-1 px-4 py-3 bg-[#505050] hover:bg-[#5a5a5a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                        >
+                          Export
+                        </button>
+                      </div>
+                    ) : (
                       <button
-                        onClick={startExport}
-                        className="flex-1 px-4 py-3 bg-[#505050] hover:bg-[#5a5a5a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                        onClick={() => {
+                          setShowExportSection(false);
+                          setExportsDrawerOpen(true);
+                        }}
+                        className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-medium text-sm rounded-lg transition-all duration-200"
                       >
-                        Export
+                        View exports
                       </button>
-                    </div>
+                    )}
                     </>
                   )}
                   

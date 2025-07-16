@@ -1,8 +1,9 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { Combobox } from "@headlessui/react";
-import { ChevronUpDownIcon, ChevronDownIcon } from "@heroicons/react/24/solid";
+import { ChevronUpDownIcon, ChevronDownIcon, ArrowLeftIcon } from "@heroicons/react/24/solid";
 import { createClient } from "@/utils/supabase/client";
+import { useSearchContext } from "../context/SearchContext";
 
 // Database table configurations
 const DB_TABLES = [
@@ -31,7 +32,7 @@ const DB_TABLES = [
     id: "deez_3_v3",
     name: "US Local Businesses",
     description: "Local business establishments in the United States", 
-    defaultColumns: ['search_keyword', 'name', 'phone', 'email', 'website'],
+    defaultColumns: ['name', 'search_keyword', 'phone', 'email', 'city'],
     totalCount: 4908756
   }
 ];
@@ -124,13 +125,13 @@ function TokensInput({
   return (
     <div className="relative">
       {/* Display existing tokens */}
-      <div className="flex flex-wrap gap-2 mb-2">
+      <div className="flex flex-wrap gap-2 mb-3">
         {tokens.map((token, idx) => (
-          <div key={idx} className="bg-blue-600/10 border border-blue-500/20 text-blue-500 text-sm px-2 py-1 rounded-md flex items-center gap-2">
+          <div key={idx} className="bg-blue-600/10 text-blue-400 text-sm px-3 py-1.5 rounded-lg flex items-center gap-2">
             <span>{token}</span>
             <button
               onClick={() => removeToken(token)}
-              className="text-blue-500 hover:text-blue-700"
+              className="text-blue-400 hover:text-blue-300 transition-colors"
             >
               ×
             </button>
@@ -147,20 +148,20 @@ function TokensInput({
           onFocus={handleFocus}
           onBlur={handleBlur}
         placeholder="Search (Enter to add new)"
-        className="w-full bg-[#212121] border border-[#404040] rounded-md px-3 py-2 text-white placeholder:text-neutral-600 focus:outline-none focus:border-green-500"
+        className="w-full bg-[#2a2a2a] border border-[#404040] rounded-lg px-3 py-2.5 text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
         />
 
       {/* Suggestions dropdown */}
       {showSuggestions && (
         <div
           ref={dropdownRef}
-          className="absolute z-10 mt-1 w-full bg-[#252525] border border-[#404040] rounded-md shadow-md max-h-48 overflow-auto"
+          className="absolute z-10 mt-1 w-full bg-[#2a2a2a] border border-[#404040] rounded-lg shadow-lg max-h-48 overflow-auto"
         >
           {isFetching ? (
-            <div className="p-3 text-sm text-neutral-400 flex items-center gap-2">
+            <div className="p-3 text-sm text-gray-400 flex items-center gap-2">
               {/* Simple loading spinner */}
               <svg
-                className="h-4 w-4 animate-spin mr-2 text-neutral-500"
+                className="h-4 w-4 animate-spin mr-2 text-gray-400"
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
@@ -189,13 +190,13 @@ function TokensInput({
                   e.preventDefault(); // Prevent losing focus
                   addToken(item);
                 }}
-                className="px-3 py-2 cursor-pointer hover:bg-[#333333] text-sm text-white"
+                className="px-3 py-2 cursor-pointer hover:bg-[#333333] text-sm text-gray-300 transition-colors"
               >
                 {item}
               </div>
             ))
           ) : (
-            <div className="p-3 text-sm text-neutral-400">
+            <div className="p-3 text-sm text-gray-400">
               No suggestions found.
             </div>
           )}
@@ -205,7 +206,12 @@ function TokensInput({
   );
 }
 
-export default function ManualSearch() {
+export default function ManualSearch({ 
+  className = "",
+  onBack = null // optional callback to return to search input view
+}) {
+  const { setFiltersDrawerOpen, setFilterDrawerData, setExportsDrawerOpen } = useSearchContext();
+  
   // Table selection state
   const [selectedTable, setSelectedTable] = useState(DB_TABLES[0]);
   const [tableDropdownOpen, setTableDropdownOpen] = useState(false);
@@ -232,7 +238,6 @@ export default function ManualSearch() {
 
   // Column & Filter Section visibility
   const [showColumnSelector, setShowColumnSelector] = useState(false);
-  const [showFilterSection, setShowFilterSection] = useState(true);
 
   // Searching columns in Column Modal
   const [columnSearch, setColumnSearch] = useState("");
@@ -261,20 +266,28 @@ export default function ManualSearch() {
   // Handle click outside dropdown
   const tableDropdownRef = useRef(null);
   
-  // Function to show filter section and initialize with empty filter if needed
+  // Function to show filter drawer and initialize with empty filter if needed
   function toggleFilterSection() {
-    if (!showFilterSection && pendingFilters.length === 0) {
       // Make a copy so we can discard changes if user cancels
-      setPendingFilters(JSON.parse(JSON.stringify(filters.length ? filters : [{
+    const initialFilters = filters.length ? filters : [{
         column: "",
         condition: "contains",
         tokens: [],
         pendingText: "",
         subop: ""
-      }])));
-    }
-    setShowFilterSection(!showFilterSection);
-    // Close other sections
+    }];
+    
+    // Set the drawer data
+    setFilterDrawerData({
+      availableColumns,
+      pendingFilters: JSON.parse(JSON.stringify(initialFilters)),
+      selectedTable,
+      onApplyFilters: handleApplyFilters,
+      onClose: handleCloseFiltersDrawer
+    });
+    
+    setFiltersDrawerOpen(true);
+    // Close other modals
     setShowColumnSelector(false);
     setShowExportSection(false);
   }
@@ -284,7 +297,6 @@ export default function ManualSearch() {
     setColumnSearch("");
     setShowColumnSelector(!showColumnSelector);
     // Close other sections
-    setShowFilterSection(false);
     setShowExportSection(false);
   }
   
@@ -292,7 +304,6 @@ export default function ManualSearch() {
   function toggleExportSection() {
     setShowExportSection(!showExportSection);
     // Close other sections
-    setShowFilterSection(false);
     setShowColumnSelector(false);
   }
 
@@ -312,6 +323,24 @@ export default function ManualSearch() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [tableDropdownRef]);
+
+  // Handle escape key to close modals
+  useEffect(() => {
+    function handleEscapeKey(e) {
+      if (e.key === "Escape") {
+        if (showColumnSelector) {
+          setShowColumnSelector(false);
+        } else if (showExportSection) {
+          setShowExportSection(false);
+        }
+      }
+    }
+    
+    document.addEventListener("keydown", handleEscapeKey);
+    return () => {
+      document.removeEventListener("keydown", handleEscapeKey);
+    };
+  }, [showColumnSelector, showExportSection]);
 
   // On mount, fetch user tokens_total
   useEffect(() => {
@@ -552,76 +581,12 @@ export default function ManualSearch() {
   // ------------------------
   //    Filter Logic
   // ------------------------
-  function openFilterModal() {
-    // Make a copy so we can discard changes if user cancels
-    setPendingFilters(JSON.parse(JSON.stringify(filters)));
-    setShowFilterSection(true);
-  }
-  function closeFilterModal() {
-    setShowFilterSection(false);
-  }
-  function addFilterLine() {
-    const isFirst = pendingFilters.length === 0;
-    setPendingFilters((prev) => [
-      ...prev,
-      {
-        column: "",
-        condition: "contains",
-        tokens: [],
-        pendingText: "",
-        subop: isFirst ? "" : "AND",
-      },
-    ]);
-  }
-  function removeFilterLine(index) {
-    setPendingFilters((prev) => prev.filter((_, i) => i !== index));
-  }
-  function updateFilterLine(index, field, value) {
-    setPendingFilters((prev) => {
-      const arr = [...prev];
-      arr[index][field] = value;
-      return arr;
-    });
-  }
-  function updateLineSubop(index, newOp) {
-    setPendingFilters((prev) => {
-      const arr = [...prev];
-      arr[index].subop = newOp;
-      return arr;
-    });
-  }
-  function updateLineTokens(index, newTokens) {
-    setPendingFilters((prev) => {
-      const arr = [...prev];
-      arr[index].tokens = newTokens;
-      return arr;
-    });
-  }
-  function updateLinePendingText(index, txt) {
-    setPendingFilters((prev) => {
-      const arr = [...prev];
-      arr[index].pendingText = txt;
-      return arr;
-    });
+  function handleCloseFiltersDrawer() {
+    setFiltersDrawerOpen(false);
   }
 
-  async function applyFilters() {
-    const updated = pendingFilters.map((rule) => {
-      // If there's leftover text, add it as a token
-      if (
-        (rule.condition === "contains" || rule.condition === "equals") &&
-        rule.pendingText?.trim()
-      ) {
-        if (!rule.tokens.includes(rule.pendingText.trim())) {
-          rule.tokens.push(rule.pendingText.trim());
-        }
-      }
-      rule.pendingText = "";
-      return rule;
-    });
-
+  async function handleApplyFilters(updated) {
     setFilters(updated);
-    setShowFilterSection(false);
     await saveUserSettings(visibleColumns, updated);
   }
 
@@ -716,390 +681,133 @@ export default function ManualSearch() {
   //    Render
   // ------------------------
   return (
-    <div className="min-h-screen bg-[#1a1a1a] text-white flex">
-      {/* Left Sidebar */}
-      <div className="w-72 min-w-[18rem] border-r border-[#333333] flex flex-col bg-[#252525]">
-        {/* Database Selector */}
-        <div className="px-4 py-3 border-b border-[#333333]">
-          <div className="text-xs text-neutral-400 mb-2">Database Selection</div>
-          <div 
-            className="flex items-center justify-between cursor-pointer select-none hover:bg-[#303030] p-2 rounded-md"
+    <div className={`bg-[#212121] text-white ${className}`}>
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Top Control Bar */}
+        <div className="flex justify-between items-center mb-6 max-w-6xl mx-auto">
+          {/* Left side: Back button and database selector */}
+          <div className="flex items-center gap-4">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="px-2 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm flex items-center"
+                aria-label="Back to Search"
+              >
+                <ArrowLeftIcon className="h-4 w-4 text-neutral-300" />
+              </button>
+            )}
+            
+            <div className="relative" ref={tableDropdownRef}>
+              <button
             onClick={() => setTableDropdownOpen(!tableDropdownOpen)}
-            ref={tableDropdownRef}
-          >
-            <div className="flex-1 min-w-0">
-              <span className="font-medium block truncate">{selectedTable.name}</span>
-              <span className="text-xs text-neutral-400 block truncate">{selectedTable.description}</span>
-            </div>
-            <ChevronDownIcon className="h-5 w-5 text-neutral-400 flex-shrink-0 ml-2" />
-          </div>
+                className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm flex items-center gap-2"
+              >
+                <span>{selectedTable.name}</span>
+                <ChevronDownIcon className="h-4 w-4 text-neutral-400" />
+              </button>
           
           {tableDropdownOpen && (
-            <div className="mt-1 bg-[#303030] border border-[#404040] rounded-md shadow-lg max-h-80 overflow-y-auto">
+                <div className="absolute top-full left-0 mt-1 w-80 bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg shadow-2xl z-50 max-h-80 overflow-y-auto">
               {DB_TABLES.map((table) => (
                 <div
                   key={table.id}
-                  className={`px-3 py-3 hover:bg-[#404040] cursor-pointer border-b border-[#454545] last:border-b-0 ${
-                    selectedTable.id === table.id ? 'bg-[#404040] border-l-2 border-l-green-500' : ''
+                      className={`px-4 py-3 hover:bg-[#333333] cursor-pointer border-b border-[#404040] last:border-b-0 transition-colors ${
+                        selectedTable.id === table.id ? 'bg-[#333333] border-l-2 border-l-blue-500' : ''
                   }`}
-                  onMouseDown={(e) => {
-                    e.preventDefault(); // Prevent losing focus
+                      onClick={() => {
                     setSelectedTable(table);
                     setTableDropdownOpen(false);
                   }}
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1 min-w-0 mr-2">
-                      <div className={`font-medium ${selectedTable.id === table.id ? 'text-green-400' : 'text-white'}`}>
+                          <div className={`font-medium ${selectedTable.id === table.id ? 'text-blue-400' : 'text-white'}`}>
                         {table.name}
                         {selectedTable.id === table.id && (
-                          <span className="ml-2 text-xs bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">
+                              <span className="ml-2 text-xs bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">
                             Selected
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-neutral-400 mt-1">{table.description}</div>
+                          <div className="text-xs text-gray-400 mt-1">{table.description}</div>
                     </div>
-                    <div className="text-xs text-neutral-500 whitespace-nowrap">
+                        <div className="text-xs text-gray-500 whitespace-nowrap">
                       {formatNumber(getTableCount(table))} records
                     </div>
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-        </div>
-        
-        {/* Database Stats */}
-        <div className="px-4 py-3 border-b border-[#333333]">
-          <div className="text-xs text-neutral-400 mb-2">Database Info</div>
-          <div className="space-y-1">
-            <div className="flex justify-between text-sm">
-              <span>Total Records:</span>
-              <span className="font-medium">{formatNumber(getTableCount(selectedTable))}</span>
-            </div>
-          {filters.length > 0 && (
-              <div className="flex justify-between text-sm">
-                <span>Matching:</span>
-                <span className="font-medium">
-              {countLoading ? (
-                <span className="inline-block w-10 bg-[#303030] h-4 rounded animate-pulse" />
-              ) : (
-                formatNumber(matchingCount)
-              )}
-            </span>
       </div>
       )}
                     </div>
                         </div>
 
-        {/* Filter Section - Always visible */}
-        <div className="px-4 py-3 border-b border-[#333333]">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-medium text-sm">Filter Settings</h3>
-                  </div>
-          
-              <div className="space-y-4">
-                {pendingFilters.map((rule, index) => (
-                  <div
-                    key={index}
-                className="bg-[#303030] border border-[#404040] p-3 rounded-md"
-                  >
-                <div className="space-y-3">
-                      {index > 0 && (
-                        <div>
-                      <div className="text-xs text-neutral-400 mb-1">Operator</div>
-                          <select
-                            value={rule.subop}
-                            onChange={(e) => updateLineSubop(index, e.target.value)}
-                        className="w-full bg-[#252525] border border-[#404040] rounded-md py-1.5 px-2 text-sm text-white"
-                          >
-                            <option value="AND">AND</option>
-                            <option value="OR">OR</option>
-                          </select>
-                        </div>
-                      )}
-                      
-                      <div>
-                        <div className="text-xs text-neutral-400 mb-1">Column</div>
-                    <Combobox
-                          value={rule.column}
-                          onChange={(val) => updateFilterLine(index, "column", val)}
-                        >
-                      <div className="relative w-full">
-                            <Combobox.Button
-                          className="relative w-full border border-[#404040] bg-[#252525] text-white text-left rounded-md py-1.5 px-3 text-sm"
-                            >
-                              <Combobox.Input
-                                onChange={(e) => {
-                                  setSearchQuery(e.target.value);
-                                  updateFilterLine(index, "column", e.target.value);
-                                }}
-                                displayValue={(val) => val}
-                                placeholder="Select column..."
-                                className="w-full bg-transparent focus:outline-none"
-                              />
-                              <span className="absolute inset-y-0 right-0 flex items-center pr-2">
-                                <ChevronUpDownIcon
-                                  className="h-5 w-5 text-neutral-400"
-                                  aria-hidden="true"
-                                />
-                              </span>
-                        </Combobox.Button>
-                            <Combobox.Options
-                          className="absolute z-10 mt-1 w-full bg-[#252525] border border-[#404040] rounded-md max-h-40 overflow-auto"
-                            >
-                              {(!searchQuery
-                                ? availableColumns
-                                : availableColumns.filter((c) =>
-                                c.toLowerCase().includes(searchQuery.toLowerCase())
-                                  )
-                              ).map((c) => (
-                            <Combobox.Option
-                                  key={c}
-                                  value={c}
-                              className={({ active }) =>
-                                    `cursor-pointer select-none px-3 py-2 text-sm ${
-                                      active
-                                    ? "bg-green-500/20 text-green-400"
-                                        : "text-white"
-                                    }`
-                                  }
-                                >
-                                  {c}
-                            </Combobox.Option>
-                          ))}
-                        </Combobox.Options>
-                      </div>
-                    </Combobox>
-                  </div>
-                  
-                      <div>
-                        <div className="text-xs text-neutral-400 mb-1">Condition</div>
-                        <select
-                          value={rule.condition}
-                          onChange={(e) =>
-                            updateFilterLine(index, "condition", e.target.value)
-                          }
-                      className="w-full bg-[#252525] border border-[#404040] rounded-md py-1.5 px-2 text-sm text-white"
-                        >
-                          <option value="contains">Contains</option>
-                          <option value="equals">Equals</option>
-                          <option value="is empty">Is Empty</option>
-                          <option value="is not empty">Is Not Empty</option>
-                        </select>
-                    </div>
-                    
-                    {(rule.condition === "contains" || rule.condition === "equals") && (
-                    <div>
-                      <div className="text-xs text-neutral-400 mb-1">Search Terms</div>
-                      <TokensInput
-                          tokens={rule.tokens}
-                          setTokens={(arr) => updateLineTokens(index, arr)}
-                          pendingText={rule.pendingText || ""}
-                          setPendingText={(txt) => updateLinePendingText(index, txt)}
-                          tableName={selectedTable.id}
-                          column={rule.column}
-                      />
-                    </div>
-                  )}
-                    
-                    <div>
-                      <button 
-                        onClick={() => removeFilterLine(index)}
-                      className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-white text-xs rounded-md border border-[#404040] mt-2"
-                      >
-                        Remove Rule
-                      </button>
-                  </div>
-                    </div>
-                </div>
-              ))}
-              
-            <div className="flex gap-2">
-              <button
-                onClick={addFilterLine}
-                className="px-3 py-1.5 bg-[#252525] hover:bg-[#303030] text-white text-xs rounded-md border border-[#404040] flex items-center gap-1"
-              >
-                  <span>+</span> Add Rule
-              </button>
-              
-              <button 
-                onClick={applyFilters}
-                className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-black font-medium text-xs rounded-md ml-auto"
-              >
-                Apply Filters
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="px-4 py-3 border-b border-[#333333] space-y-2">
-          <div className="text-xs text-neutral-400 mb-1">Actions</div>
-          
+          {/* Right side controls */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Select Columns */}
               <button 
             onClick={toggleColumnSelector}
-            className={`w-full px-3 py-2 rounded-md text-sm flex items-center gap-2 ${showColumnSelector ? 'bg-blue-600/20 text-blue-400 border border-blue-500/20' : 'bg-[#303030] hover:bg-[#404040] border border-[#404040]'}`}
+              className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm"
               >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-columns"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="12" x2="12" y1="3" y2="21"/></svg>
-            <span>Columns</span>
+              Select Columns
               </button>
           
+            {/* Export Data */}
               <button 
             onClick={toggleExportSection}
-            className={`w-full px-3 py-2 rounded-md text-sm flex items-center gap-2 ${showExportSection ? 'bg-blue-600/20 text-blue-400 border border-blue-500/20' : 'bg-[#303030] hover:bg-[#404040] border border-[#404040]'}`}
+              className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm"
               >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-download"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-            <span>Export</span>
+              Export Data
               </button>
-                    </div>
-        
-        {/* Dynamic Content Section */}
-        <div className="flex-1 overflow-y-auto">
-          {/* Column Selection Section */}
-          {showColumnSelector && (
-            <div className="px-4 py-3 border-b border-[#333333]">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-medium text-sm">Column Selection</h3>
-              </div>
-              
-              <div className="mb-4">
-                <input
-                  type="text"
-                  placeholder="Search columns..."
-                  value={columnSearch}
-                  onChange={(e) => setColumnSearch(e.target.value)}
-                  className="w-full bg-[#303030] border border-[#404040] rounded-md px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-green-500"
-                />
-            </div>
-              
-              <div className="max-h-80 overflow-y-auto space-y-2 mb-4">
-                {filteredAvailableColumns.map((col) => (
-                  <label key={col} className="flex items-center gap-2 cursor-pointer py-1">
-                    <input
-                      type="checkbox"
-                      checked={visibleColumns.includes(col)}
-                      onChange={() => toggleColumn(col)}
-                      className="h-4 w-4 accent-green-500"
-                    />
-                    <span className="text-sm text-white">{col}</span>
-                  </label>
-                ))}
-              </div>
-              
+    
+            {/* Filters */}
               <button 
-                onClick={closeColumnSelectorModal}
-                className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-black font-medium text-xs rounded-md"
-              >
-                Apply Changes
-              </button>
-              </div>
-          )}
-          
-          {/* Export Section */}
-          {showExportSection && (
-            <div className="px-4 py-3 border-b border-[#333333]">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-medium text-sm">Export Data</h3>
-              </div>
-              
-              {exporting ? (
-                <div>
-                  <div className="w-full bg-[#303030] h-2 rounded-full mb-2 overflow-hidden">
-                    <div
-                      className="h-full bg-green-500 rounded-full"
-                      style={{ width: `${exportProgress}%` }}
-                    />
-              </div>
-                  <div className="text-sm text-neutral-400 text-center">
-                    {exportProgress}%
-            </div>
-                  </div>
-              ) : (
-                <>
-                  <p className="text-xs text-neutral-400 mb-4">
-                    Choose how many rows to export. You'll be charged 1 token per
-                    row, but only if the export completes successfully.
-                  </p>
-                  
-                  <div className="mb-4">
-                    <div className="text-xs text-neutral-400 mb-1">Rows to Export</div>
-                    <input
-                      type="number"
-                      value={rowsToExport === null ? "" : rowsToExport}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setRowsToExport(val === "" ? null : Number(val));
-                      }}
-                      min="1"
-                      className="w-full bg-[#303030] border border-[#404040] rounded-md px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-green-500"
-                    />
-                </div>
-                  
-                  {exportError && (
-                    <div className="mb-4 text-sm text-red-500">{exportError}</div>
-                  )}
-                  
-                <button
-                    onClick={startExport}
-                    className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-black font-medium text-xs rounded-md"
-                >
-                    Start Export
+              onClick={toggleFilterSection}
+              className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm flex items-center gap-2"
+            >
+              <span>Filters</span>
+              <ChevronDownIcon
+                className={`h-4 w-4 transition-transform`}
+              />
                 </button>
-                </>
-              )}
-              
-              {exportDone && (
-                <p className="mt-3 text-sm text-green-500">
-                  Export completed successfully!
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-      
-      {/* Main Content */}
-      <div className="flex-1 min-w-0 p-4">
-        {/* Active Filter Badges */}
-        {filters.length > 0 && (
-          <div className="mb-4 flex flex-wrap gap-2">
-            {filters.map((f, i) => {
-              const prefix = i === 0 ? "Where" : f.subop || "AND";
-              const safeTokens = Array.isArray(f.tokens) ? f.tokens : [];
-              let desc = "";
-              if (f.condition === "is empty" || f.condition === "is not empty") {
-                desc = f.condition;
-              } else {
-                desc = `${f.condition} [${safeTokens.join(", ")}]`;
-              }
-              return (
-                <div key={i} className="bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs px-2 py-1 rounded-md">
-                  <span>
-                    <strong>{prefix}</strong> {f.column} {desc}
-                  </span>
+
+                        {/* Filter Count Indicator - show when filters exist */}
+            {filters.length > 0 && (
+              <div className="ml-2">
+                <div className="bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs px-3 py-2 rounded-md whitespace-nowrap">
+                  {filters.length} Filter{filters.length !== 1 ? 's' : ''}
                 </div>
-              );
-            })}
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
-        {/* Loading state for user settings */}
-        {!userSettingsLoaded && (
-          <div className="mt-6 text-sm text-neutral-400">Loading user settings...</div>
-        )}
-
-        {/* Table */}
-        {userSettingsLoaded && (
-          <div className="overflow-x-auto w-full border border-[#333333] rounded-md">
-            <table className="min-w-full border-collapse">
+        {/* Main Search Interface */}
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Main Content Area */}
+          <div className="flex-1 min-w-0">
+            {/* Results Table */}
+            {userSettingsLoaded && (
+              <div className="bg-white/5 backdrop-blur-sm rounded-2xl overflow-hidden max-w-6xl mx-auto">
+                <div className="px-6 py-5 flex items-center justify-between">
+                  <h3 className="font-semibold text-lg text-white">
+                    {countLoading ? 'Loading…' : `${formatNumber(matchingCount)} results | ${selectedTable.name}`}
+                  </h3>
+                  {filters.length > 0 && (
+                    <span className="text-sm text-white/70">
+                      Page {page + 1} of {totalPages}
+                    </span>
+                  )}
+                </div>
+                
+                <div className="overflow-x-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.1) transparent' }}>
+                  <table className="w-full">
               <thead>
-                <tr className="bg-[#252525] border-b border-[#333333]">
+                      <tr className="bg-white/10 backdrop-blur-sm border-b border-[#333333]">
                   {visibleColumns.map((col) => (
                     <th
                       key={col}
-                      className="relative group py-2 px-4 text-sm font-medium text-neutral-300 text-left"
+                            className="relative group py-4 px-6 text-sm font-semibold text-white/80 text-left first:pl-6 last:pr-6 border-0"
                       style={{
                         width: columnWidths[col] || "auto",
                         minWidth: "150px",
@@ -1108,7 +816,7 @@ export default function ManualSearch() {
                       <div className="flex items-center justify-between">
                         <span>{col}</span>
                         <div
-                          className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-[#404040] opacity-0 group-hover:opacity-100"
+                                className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
                           onMouseDown={(e) => {
                             e.preventDefault();
                             const startX = e.pageX;
@@ -1146,22 +854,24 @@ export default function ManualSearch() {
               <tbody>
                 {rowsLoading
                   ? Array.from({ length: limit }).map((_, i) => (
-                      <tr key={i} className="animate-pulse border-b border-[#333333]">
+                            <tr key={i} className={`animate-pulse ${i % 2 === 0 ? 'bg-[#252525]' : 'bg-[#1e1e1e]'}`}>
                         {visibleColumns.map((c) => (
-                          <td key={c} className="py-2 px-4">
-                            <div className="h-4 bg-[#303030] rounded w-full" />
+                                <td key={c} className="py-4 px-6 first:pl-6 last:pr-6 border-0">
+                                  <div className="h-4 bg-white/10 rounded-lg w-full" />
                           </td>
                         ))}
                       </tr>
                     ))
                   : results.map((row, i) => (
-                      <tr key={i} className="border-b border-[#333333] hover:bg-[#252525]">
+                            <tr key={i} className={`hover:bg-[#333333]/40 transition-all duration-200 ${i % 2 === 0 ? 'bg-[#252525]' : 'bg-[#1e1e1e]'}`}>
                         {visibleColumns.map((c) => (
                           <td
                             key={c}
-                            className="py-2 px-4 text-sm text-white whitespace-nowrap"
+                                className="py-4 px-6 text-sm text-white/90 first:pl-6 last:pr-6 border-0"
                           >
-                            {row[c]}
+                                <div className="truncate font-medium">
+                                  {row[c] && row[c].length > 40 ? `${row[c].substring(0, 40)}...` : row[c]}
+                                </div>
                           </td>
                         ))}
                       </tr>
@@ -1169,21 +879,21 @@ export default function ManualSearch() {
               </tbody>
             </table>
           </div>
-        )}
 
         {/* Pagination */}
-        {userSettingsLoaded && (
-          <div className="mt-4 flex items-center justify-end">
-            {filters.length > 0 && (
-              <span className="text-xs text-neutral-400 mr-auto">
-                Page {page + 1} of {totalPages}
-              </span>
-            )}
-            <div className="flex gap-2">
+                <div className="px-6 py-5 flex items-center justify-between">
+                  <div className="text-sm text-white/70">
+                    {results.length > 0 ? (
+                      <>Showing {results.length} of {formatNumber(matchingCount)} results</>
+                    ) : (
+                      <>No results found</>
+                    )}
+                  </div>
+                  <div className="flex gap-3">
                 <button 
                 onClick={prevPage} 
                 disabled={page === 0}
-                className={`px-3 py-1.5 text-xs rounded-md border ${page === 0 ? 'bg-[#252525] text-neutral-500 border-[#333333] cursor-not-allowed' : 'bg-[#252525] hover:bg-[#303030] text-white border-[#404040]'}`}
+                      className={`px-5 py-2.5 text-sm rounded-lg font-medium transition-all duration-200 ${page === 0 ? 'bg-white/5 text-white/30 border-white/10 cursor-not-allowed' : 'bg-white/5 hover:bg-white/10 backdrop-blur-sm text-white border-white/10 hover:border-white/20'}`}
                 >
                 Previous
                 </button>
@@ -1196,22 +906,217 @@ export default function ManualSearch() {
                     tokensTotal !== null && tokensTotal <= 201 ? 4 : 24
                   )
                 }
-                className={`px-3 py-1.5 text-xs rounded-md border ${
+                      className={`px-5 py-2.5 text-sm rounded-lg font-medium transition-all duration-200 ${
                   page >=
                   Math.min(
                     totalPages - 1,
                     tokensTotal !== null && tokensTotal <= 201 ? 4 : 24
                   )
-                    ? 'bg-[#252525] text-neutral-500 border-[#333333] cursor-not-allowed'
-                    : 'bg-[#252525] hover:bg-[#303030] text-white border-[#404040]'
+                          ? 'bg-white/5 text-white/30 border-white/10 cursor-not-allowed'
+                          : 'bg-white/5 hover:bg-white/10 backdrop-blur-sm text-white border-white/10 hover:border-white/20'
                 }`}
               >
                 Next
               </button>
+                  </div>
               </div>
             </div>
           )}
       </div>
       </div>
+      </div>
+            
+      {/* Column Selection Modal */}
+      {showColumnSelector && (
+        <>
+          {/* Semi-transparent overlay */}
+          <div className="fixed inset-0 bg-black/60 z-40" />
+          
+          <div 
+            className="fixed inset-0 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowColumnSelector(false)}
+          >
+            <div 
+              className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <h3 className="font-medium text-lg text-white mb-2">Column Selection</h3>
+                <p className="text-sm text-gray-400 mb-6">
+                  Select which columns to display in your results table.
+                </p>
+                  
+                <div className="mb-6">
+                  <input
+                    type="text"
+                    placeholder="Search columns..."
+                    value={columnSearch}
+                    onChange={(e) => setColumnSearch(e.target.value)}
+                    className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
+                  />
+                </div>
+                  
+                <div className="max-h-60 overflow-y-auto space-y-1 mb-6">
+                  {/* Select All Option */}
+                  <label className="flex items-center gap-3 cursor-pointer py-3 px-4 hover:bg-[#333333] rounded-lg transition-all duration-200 border-b border-[#404040] mb-2">
+                                          <input
+                        type="checkbox"
+                        checked={visibleColumns.length === filteredAvailableColumns.length}
+                        onChange={() => {
+                          if (visibleColumns.length === filteredAvailableColumns.length) {
+                            // Deselect all
+                            setVisibleColumns([]);
+                          } else {
+                            // Select all - prioritize default columns first
+                            const defaultCols = selectedTable.defaultColumns.filter(col => 
+                              filteredAvailableColumns.includes(col)
+                            );
+                            const otherCols = filteredAvailableColumns.filter(col => 
+                              !selectedTable.defaultColumns.includes(col)
+                            );
+                            setVisibleColumns([...defaultCols, ...otherCols]);
+                          }
+                        }}
+                        className="h-4 w-4 accent-blue-500 rounded"
+                      />
+                    <span className="text-sm text-gray-300 font-medium">Select all</span>
+                  </label>
+                  
+                  {filteredAvailableColumns.map((col) => (
+                    <label key={col} className="flex items-center gap-3 cursor-pointer py-3 px-4 hover:bg-[#333333] rounded-lg transition-all duration-200">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.includes(col)}
+                        onChange={() => toggleColumn(col)}
+                        className="h-4 w-4 accent-blue-500 rounded"
+                      />
+                      <span className="text-sm text-gray-300">{col}</span>
+                    </label>
+                  ))}
+                </div>
+                  
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setShowColumnSelector(false)}
+                    className="flex-1 px-4 py-3 bg-[#404040] hover:bg-[#4a4a4a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={closeColumnSelectorModal}
+                    className="flex-1 px-4 py-3 bg-[#505050] hover:bg-[#5a5a5a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                  >
+                    Apply Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+              
+      {/* Export Data Modal */}
+      {showExportSection && (
+        <>
+          {/* Semi-transparent overlay */}
+          <div className="fixed inset-0 bg-black/60 z-40" />
+          
+          <div 
+            className="fixed inset-0 flex items-center justify-center z-50 p-4"
+            onClick={() => setShowExportSection(false)}
+          >
+            <div 
+              className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <h3 className="font-medium text-lg text-white mb-2">Export Data</h3>
+                  
+                {exporting ? (
+                  <div className="text-center py-4">
+                    <div className="w-full bg-[#404040] h-2 rounded-full mb-4 overflow-hidden">
+                      <div
+                        className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                        style={{ width: `${exportProgress}%` }}
+                      />
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      {exportProgress}% Complete
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-400 mb-6 leading-relaxed">
+                      Choose how many rows to export. You'll be charged 1 token per
+                      row, but only if the export completes successfully.
+                    </p>
+                      
+                    <div className="mb-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-sm text-gray-300">Amount</div>
+                        <div className="text-xs text-gray-500">Max: 200K</div>
+                      </div>
+                      <input
+                        type="number"
+                        value={rowsToExport === null ? "" : rowsToExport}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setRowsToExport(val === "" ? null : Number(val));
+                        }}
+                        min="1"
+                        max="200000"
+                        placeholder="0.00"
+                        className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
+                      />
+                    </div>
+                      
+                    {exportError && (
+                      <div className="mb-6 text-sm text-red-400 bg-red-500/10 rounded-lg px-4 py-3">
+                        {exportError}
+                      </div>
+                    )}
+                      
+                                        {!exportDone ? (
+                      <div className="flex gap-3">
+                        <button 
+                          onClick={() => setShowExportSection(false)}
+                          className="flex-1 px-4 py-3 bg-[#404040] hover:bg-[#4a4a4a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={startExport}
+                          className="flex-1 px-4 py-3 bg-[#505050] hover:bg-[#5a5a5a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                        >
+                          Export
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setShowExportSection(false);
+                          setExportsDrawerOpen(true);
+                        }}
+                        className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-medium text-sm rounded-lg transition-all duration-200"
+                      >
+                        View exports
+                      </button>
+                    )}
+                    </>
+                  )}
+                  
+                  {exportDone && (
+                  <div className="mt-6 text-sm text-green-400 bg-green-500/10 rounded-lg px-4 py-3 text-center">
+                      Export completed successfully!
+                </div>
+              )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* FiltersDrawer is now rendered at the SearchProvider level */}
+    </div>
   );
 }
