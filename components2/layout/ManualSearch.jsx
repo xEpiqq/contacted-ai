@@ -684,8 +684,8 @@ export default function ManualSearch({
     <div className={`bg-[#212121] text-white ${className}`}>
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Top Control Bar */}
-        <div className="flex justify-between items-center mb-6 max-w-6xl mx-auto">
-          {/* Left side: Back button and database selector */}
+        <div className="flex justify-between items-center mb-6 mx-auto px-4 max-w-[calc(100vw-3rem)]">
+          {/* Left side: Back button, database selector, and results count */}
           <div className="flex items-center gap-4">
             {onBack && (
               <button
@@ -737,9 +737,16 @@ export default function ManualSearch({
                   </div>
                 </div>
               ))}
-      </div>
-      )}
-                    </div>
+            </div>
+          )}
+        </div>
+        
+            {/* Results count */}
+            {userSettingsLoaded && (
+              <div className="text-sm text-white/70">
+                {countLoading ? 'Loading…' : `${formatNumber(matchingCount)} results`}
+            </div>
+            )}
                         </div>
 
           {/* Right side controls */}
@@ -764,43 +771,93 @@ export default function ManualSearch({
               <button 
               onClick={toggleFilterSection}
               className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm flex items-center gap-2"
-            >
+              >
               <span>Filters</span>
               <ChevronDownIcon
                 className={`h-4 w-4 transition-transform`}
               />
-                </button>
+              </button>
 
                         {/* Filter Count Indicator - show when filters exist */}
             {filters.length > 0 && (
               <div className="ml-2">
                 <div className="bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs px-3 py-2 rounded-md whitespace-nowrap">
                   {filters.length} Filter{filters.length !== 1 ? 's' : ''}
-                </div>
               </div>
-            )}
-          </div>
-        </div>
-
+              </div>
+          )}
+            </div>
+                  </div>
+      
         {/* Main Search Interface */}
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Main Content Area */}
           <div className="flex-1 min-w-0">
             {/* Results Table */}
             {userSettingsLoaded && (
-              <div className="bg-white/5 backdrop-blur-sm rounded-2xl overflow-hidden max-w-6xl mx-auto">
-                <div className="px-6 py-5 flex items-center justify-between">
-                  <h3 className="font-semibold text-lg text-white">
-                    {countLoading ? 'Loading…' : `${formatNumber(matchingCount)} results | ${selectedTable.name}`}
-                  </h3>
-                  {filters.length > 0 && (
-                    <span className="text-sm text-white/70">
-                      Page {page + 1} of {totalPages}
-                    </span>
-                  )}
-                </div>
-                
-                <div className="overflow-x-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255, 255, 255, 0.1) transparent' }}>
+              <div className="bg-white/5 backdrop-blur-sm rounded-2xl overflow-hidden mx-auto px-4 max-w-[calc(100vw-3rem)]">
+                {/* Top scrollbar */}
+                <div 
+                  className="overflow-x-auto overflow-y-hidden h-4 mb-2 px-6 pt-4" 
+                  style={{ 
+                    scrollbarWidth: 'thin', 
+                    scrollbarColor: 'rgba(255, 255, 255, 0.1) transparent',
+                    overflowY: 'hidden'
+                  }}
+                  onScroll={(e) => {
+                    const tableContainer = e.target.parentElement.querySelector('.table-container');
+                    if (tableContainer) {
+                      tableContainer.scrollLeft = e.target.scrollLeft;
+                    }
+                  }}
+                >
+                  <style jsx>{`
+                    .overflow-x-auto::-webkit-scrollbar-vertical {
+                      display: none;
+                    }
+                    .overflow-x-auto::-webkit-scrollbar-corner {
+                      display: none;
+                    }
+                  `}</style>
+                  <div style={{ height: '1px', width: 'max-content', minWidth: '100%' }}>
+                    <table className="w-full invisible">
+                      <thead>
+                        <tr>
+                          {visibleColumns.map((col) => (
+                            <th
+                              key={col}
+                              style={{
+                                width: columnWidths[col] || "auto",
+                                minWidth: "150px",
+                              }}
+                            />
+                          ))}
+                        </tr>
+                      </thead>
+                    </table>
+        </div>
+      </div>
+      
+        
+
+                <div 
+                  className="table-container overflow-x-auto overflow-y-hidden" 
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                  onScroll={(e) => {
+                    const topScrollbar = e.target.parentElement.querySelector('.overflow-x-auto');
+                    if (topScrollbar) {
+                      topScrollbar.scrollLeft = e.target.scrollLeft;
+                    }
+                  }}
+                >
+                  <style jsx>{`
+                    .table-container::-webkit-scrollbar {
+                      display: none;
+                    }
+                    .table-container::-webkit-scrollbar-vertical {
+                      display: none;
+                    }
+                  `}</style>
                   <table className="w-full">
               <thead>
                       <tr className="bg-white/10 backdrop-blur-sm border-b border-[#333333]">

@@ -42,7 +42,7 @@ const { setExportsDrawerOpen, setDrawerOpen, setCreditsScreenOpen, isExtensionLo
     setApiError(null);
     if (onAiProcessingChange) onAiProcessingChange(true);
     if (onAiStatusChange) onAiStatusChange("Thinking...");
-    
+
     try {
       // Call our consolidated API endpoint
       const response = await fetch('/api/ai/test-clone', {
