@@ -91,7 +91,7 @@ export async function POST(request) {
 async function extractAdditionalFilters(description) {
   try {
     const { object } = await generateObject({
-      model: openai('gpt-4o'),
+      model: openai('gpt-4.1'),
       schema: AdditionalFiltersSchema,
       system: ADDITIONAL_FILTERS_PROMPT,
       prompt: `Please analyze this description and extract any additional filter criteria beyond job title, industry, and location for the OTC1 international professionals database: "${description}"`,

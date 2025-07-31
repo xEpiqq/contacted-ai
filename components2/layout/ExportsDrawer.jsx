@@ -11,16 +11,12 @@ import {
   Trash2,
   Loader
 } from "lucide-react";
-import { useSearchContext } from "../context/SearchContext";
 
-const ExportsDrawer = () => {
-  // Minimal state from context
-  const {
-    exportsDrawerOpen,
-    setExportsDrawerOpen,
-    user
-  } = useSearchContext();
-  
+const ExportsDrawer = ({ 
+  exportsDrawerOpen, 
+  setExportsDrawerOpen, 
+  user 
+}) => {
   // Local state - moved from context
   const [exports, setExports] = useState([]);
   const [exportsLoading, setExportsLoading] = useState(false);
@@ -79,7 +75,7 @@ const ExportsDrawer = () => {
       setExportsLoading(false);
     }
   };
-
+  
   // Helper function to format date for display
   const formatExportDate = (dateString) => {
     if (!dateString) return "Unknown date";
@@ -289,7 +285,7 @@ const ExportsDrawer = () => {
     if (!exportsFetched && user) {
       fetchExports();
     }
-  }, [exportsFetched, user]);
+    }, [exportsFetched, user]);
 
   return (
     <AnimatePresence>
@@ -301,7 +297,7 @@ const ExportsDrawer = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/30 z-20"
+            className="fixed inset-0 bg-black/30 z-10"
             onClick={() => {
               if (pendingDeleteId) {
                 cancelDelete();

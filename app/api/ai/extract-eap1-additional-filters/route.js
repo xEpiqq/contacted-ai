@@ -137,7 +137,7 @@ async function extractAdditionalFilters(description) {
 
   try {
     const { object } = await generateObject({
-      model: openai('gpt-4o'),
+      model: openai('gpt-4.1'),
       schema: AdditionalFiltersSchema,
       system: systemPrompt,
       prompt: `Please analyze this description and extract any additional filter criteria beyond job title, industry, and location: "${description}"`,

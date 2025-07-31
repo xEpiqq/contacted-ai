@@ -12,20 +12,16 @@ import {
   Download
 } from "lucide-react";
 import Papa from "papaparse";
-import { useSearchContext } from "../context/SearchContext";
 
-const EnrichmentDrawer = () => {
+const EnrichmentDrawer = ({ 
+  drawerOpen, 
+  setDrawerOpen, 
+  setToastConfig,
+  creditsRemaining,
+  setCreditsRemaining 
+}) => {
   // Refs
   const fileInputRef = useRef(null);
-  
-  // Only get the absolutely necessary state from context
-  const {
-    drawerOpen,
-    setDrawerOpen,
-    setToastConfig,
-    creditsRemaining,
-    setCreditsRemaining
-  } = useSearchContext();
   
   // Local state - moved from context
   const [uploadStep, setUploadStep] = useState(0); // 0: upload, 1: columns, 2: settings
@@ -710,7 +706,7 @@ const EnrichmentDrawer = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/30 z-20"
+            className="fixed inset-0 bg-black/30 z-10"
             onClick={handleDrawerClose}
           />
           

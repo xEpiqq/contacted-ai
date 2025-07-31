@@ -149,7 +149,7 @@ export async function POST(request) {
 async function extractBusinessTypes(description) {
   try {
     const { object } = await generateObject({
-      model: openai('gpt-4o'),
+      model: openai('gpt-4.1'),
       schema: BusinessTypesSchema,
       system: BUSINESS_TYPES_PROMPT,
       prompt: `Extract business types and categories from this description for local business search:\n\n"${description}"`,
@@ -170,7 +170,7 @@ async function extractBusinessTypes(description) {
 async function extractLocationInfo(description) {
   try {
     const { object } = await generateObject({
-      model: openai('gpt-4o'),
+      model: openai('gpt-4.1'),
       schema: LocationInfoSchema,
       system: LOCATION_PROMPT,
       prompt: `Extract location information from this description for local business search:\n\n"${description}"`,

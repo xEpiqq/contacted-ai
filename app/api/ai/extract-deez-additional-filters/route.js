@@ -151,7 +151,7 @@ async function extractAdditionalFilters(description) {
 
   try {
     const { object } = await generateObject({
-      model: openai('gpt-4o'),
+      model: openai('gpt-4.1'),
       schema: AdditionalFiltersSchema,
       system: systemPrompt,
       prompt: `Extract additional filter parameters (beyond business type and location) from this description for searching the DEEZ local businesses database:\n\n"${description}"`,

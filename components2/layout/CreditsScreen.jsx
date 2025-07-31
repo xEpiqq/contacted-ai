@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { DollarSign } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
-import { useSearchContext } from "../context/SearchContext";
 
 // Stripe promise
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
@@ -53,8 +52,7 @@ const PLANS = [
   }
 ];
 
-function CreditsScreen({ onClose }) {
-  const { user, profile } = useSearchContext();
+function CreditsScreen({ onClose, user, profile }) {
   const [selectedPlan, setSelectedPlan] = useState("20k");
   const [processingPriceId, setProcessingPriceId] = useState("");
   
@@ -163,7 +161,7 @@ function CreditsScreen({ onClose }) {
         ease: "easeOut",
         exit: { duration: 0.15 } // Exit animation runs twice as fast
       }}
-      className="fixed inset-0 bg-[#212121] z-50 overflow-y-auto"
+      className="fixed inset-0 bg-[#212121] z-10 overflow-y-auto"
     >
       <div className="max-w-5xl mx-auto p-6 pt-16 flex flex-col md:flex-row gap-8">
         {/* Testimonials Column */}

@@ -39,7 +39,7 @@ function Guide({
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: position === "right" ? width : -width, opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className={`fixed top-24 ${position}-4 max-w-[90vw] bg-[#2b2b2b] border border-[#404040] rounded-2xl shadow-lg text-sm text-neutral-200 z-50 pointer-events-auto overflow-hidden`}
+            className={`fixed top-24 ${position}-4 max-w-[90vw] bg-[#2b2b2b] border border-[#404040] rounded-2xl shadow-lg text-sm text-neutral-200 z-20 pointer-events-auto overflow-hidden`}
             style={{ width: width + 'px' }}
           >
             <button
@@ -84,7 +84,7 @@ function Guide({
             transition={{ type: "spring", stiffness: 300, damping: 25 }}
             aria-label="open guide"
             onClick={() => setGuideOpen(true)}
-            className={`fixed top-1/2 ${position === "right" ? "right-2" : "left-2"} -translate-y-1/2 z-50 flex h-8 w-8 items-center justify-center rounded-full bg-[#3a3a3a] text-neutral-400 hover:text-white pointer-events-auto cursor-pointer`}
+            className={`fixed top-1/2 ${position === "right" ? "right-2" : "left-2"} -translate-y-1/2 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-[#3a3a3a] text-neutral-400 hover:text-white pointer-events-auto cursor-pointer`}
           >
             <ArrowLeftIcon className={`h-4 w-4 ${position === "left" ? "rotate-180" : ""}`} />
           </motion.button>

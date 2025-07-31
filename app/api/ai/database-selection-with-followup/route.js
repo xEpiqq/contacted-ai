@@ -277,7 +277,7 @@ async function callFlow(flowPath, data) {
 async function determineDatabase(description) {
   try {
     const { object } = await generateObject({
-      model: openai('gpt-4o'),
+      model: openai('gpt-4.1'),
       schema: DatabaseSelectionSchema,
       system: DB_SELECTION_WITH_FOLLOWUP_PROMPT,
       prompt: description,

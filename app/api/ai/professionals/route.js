@@ -231,7 +231,7 @@ Generate a diverse set of up to 10 highly relevant job titles, including alterna
 
   try {
     const { object } = await generateObject({
-      model: openai('gpt-4o'),
+      model: openai('gpt-4.1'),
       schema: JobTitlesSchema,
       system: systemPrompt,
       prompt: userPrompt,
@@ -264,7 +264,7 @@ GUIDELINES:
   
   try {
     const { object } = await generateObject({
-      model: openai('gpt-4o'),
+      model: openai('gpt-4.1'),
       schema: IndustryKeywordsSchema,
       system: systemPrompt,
       prompt: `Please extract ONLY explicitly stated industry keywords from the following description of a target audience (return an empty array if no industries are explicitly mentioned): "${description}"`,
@@ -295,7 +295,7 @@ ${guidelinesText}
 
   try {
     const { object } = await generateObject({
-      model: openai('gpt-4o'),
+      model: openai('gpt-4.1'),
       schema: LocationComponentsSchema,
       system: systemPrompt,
       prompt: `Extract location components from: "${description}"`,
@@ -434,7 +434,7 @@ Return a boolean indicating whether additional filter extraction is needed, alon
 
   try {
     const { object } = await generateObject({
-      model: openai('gpt-4o'),
+      model: openai('gpt-4.1'),
       schema: AdditionalFiltersScreeningSchema,
       system: systemPrompt,
       prompt: `Does this query need additional filter extraction beyond job titles, industry, and location?\n\nQuery: "${description}"`,
