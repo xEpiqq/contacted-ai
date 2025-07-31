@@ -380,184 +380,6 @@ export default function ManualSearch({
     });
   }, []);
 
-  // Function to convert AI results to filter format
-  function convertAIResultsToFilters(aiData) {
-    console.log("=== convertAIResultsToFilters DEBUG ===");
-    console.log("selectedTable.id:", selectedTable.id);
-    console.log("aiData:", aiData);
-    
-    const newFilters = [];
-    
-    // Define column mappings for each database
-    const getColumnMappings = (tableId) => {
-      switch (tableId) {
-        case "usa4_new_v2":
-          return {
-            jobTitle: "Job title",
-            industry: "Industry", 
-            location: "Region"
-          };
-        case "eap1_new_v2":
-          return {
-            jobTitle: "person_title",
-            industry: "person_detailed_function (98% coverage)", 
-            location: "person_location_country (98% coverage)",
-            dbName: "Global B2B Contacts"
-          };
-        case "otc1_new_v2": 
-          return {
-            jobTitle: "job_title",
-            industry: "industry",
-            location: "location_country",
-            dbName: "International Professionals"
-          };
-        case "deez_3_v3":
-          return {
-            jobTitle: null, // Local businesses don't have individual job titles
-            industry: "search_keyword", // Map business types to search_keyword field
-            location: "city" // Map location to city field
-          };
-        default:
-          return {
-            jobTitle: "Job title",
-            industry: "Industry",
-            location: "Region"
-          };
-      }
-    };
-    
-    const columnMap = getColumnMappings(selectedTable.id);
-    console.log("columnMap:", columnMap);
-    
-    // Job Titles / Business Types
-    if (selectedTable.id === "deez_3_v3") {
-      console.log("Processing DEEZ business types...");
-      console.log("aiData.businessTypes:", aiData.businessTypes);
-      console.log("columnMap.industry:", columnMap.industry);
-      
-      // For local businesses, use businessTypes instead of jobTitles
-      if (aiData.businessTypes && aiData.businessTypes.length > 0 && columnMap.industry) {
-        console.log("Adding business types filter with tokens:", aiData.businessTypes);
-        newFilters.push({
-          column: columnMap.industry,
-          condition: "contains",
-          tokens: aiData.businessTypes,
-          pendingText: "",
-          subop: newFilters.length === 0 ? "" : "AND"
-        });
-      } else {
-        console.log("Not adding business types filter. Conditions:", {
-          hasBusinessTypes: !!(aiData.businessTypes && aiData.businessTypes.length > 0),
-          hasIndustryColumn: !!columnMap.industry,
-          businessTypesLength: aiData.businessTypes?.length || 0
-        });
-      }
-    } else {
-      // For professional databases, use jobTitles
-      if (aiData.jobTitles && aiData.jobTitles.length > 0 && columnMap.jobTitle) {
-        newFilters.push({
-          column: columnMap.jobTitle,
-          condition: "contains",
-          tokens: aiData.jobTitles,
-          pendingText: "",
-          subop: newFilters.length === 0 ? "" : "AND"
-        });
-      }
-    }
-    
-    // Industry Keywords (skip for DEEZ since business types are handled above)
-    if (selectedTable.id !== "deez_3_v3" && aiData.industryKeywords && aiData.industryKeywords.length > 0 && columnMap.industry) {
-      newFilters.push({
-        column: columnMap.industry,
-        condition: "contains", 
-        tokens: aiData.industryKeywords,
-        pendingText: "",
-        subop: newFilters.length === 0 ? "" : "AND"
-      });
-    }
-    
-    // Location Info
-    if (aiData.locationInfo && aiData.locationInfo.hasLocation && columnMap.location) {
-      const locationTokens = [];
-      const loc = aiData.locationInfo.components;
-      
-      if (selectedTable.id === "deez_3_v3") {
-        // For DEEZ (local businesses), prioritize city since that's what we map to
-        if (loc.city) locationTokens.push(loc.city);
-        
-        // Also add region/state as additional filters if available
-        if (loc.state || loc.region) {
-          newFilters.push({
-            column: "region",
-            condition: "contains",
-            tokens: [loc.state || loc.region],
-            pendingText: "",
-            subop: newFilters.length === 0 ? "" : "AND"
-          });
-        }
-        
-        // Add ZIP code as additional filter if available
-        if (loc.zip) {
-          newFilters.push({
-            column: "zip",
-            condition: "contains",
-            tokens: [loc.zip],
-            pendingText: "",
-            subop: newFilters.length === 0 ? "" : "AND"
-          });
-        }
-      } else if (selectedTable.id === "eap1_new_v2") {
-        // For EAP1, prioritize state/country over city
-        if (loc.state) locationTokens.push(loc.state);
-        if (loc.country) locationTokens.push(loc.country);
-        if (loc.city && locationTokens.length === 0) locationTokens.push(loc.city);
-      } else {
-        // For other databases, use the original logic
-        if (loc.city) locationTokens.push(loc.city);
-        if (loc.state) locationTokens.push(loc.state);
-        if (loc.region) locationTokens.push(loc.region);
-      }
-      
-      if (locationTokens.length > 0) {
-        newFilters.push({
-          column: columnMap.location,
-          condition: "contains",
-          tokens: locationTokens,
-          pendingText: "",
-          subop: newFilters.length === 0 ? "" : "AND"
-        });
-      }
-    }
-    
-    // Additional Filters
-    if (aiData.hasAdditionalFilters && aiData.additionalFilters && aiData.additionalFilters.length > 0) {
-      aiData.additionalFilters.forEach(filter => {
-        // Only add if the column exists in available columns
-        // This will be validated when availableColumns is loaded
-        newFilters.push({
-          column: filter.column,
-          condition: "contains",
-          tokens: Array.isArray(filter.values) ? filter.values : [filter.values],
-          pendingText: "",
-          subop: newFilters.length === 0 ? "" : "AND"
-        });
-      });
-    }
-    
-    // If no filters were created, add an empty one
-    if (newFilters.length === 0) {
-      newFilters.push({
-        column: "",
-        condition: "contains",
-        tokens: [],
-        pendingText: "",
-        subop: ""
-      });
-    }
-    
-    return newFilters;
-  }
-
   // Function to fetch database total counts
   async function fetchDatabaseCount(tableId) {
     try {
@@ -595,8 +417,7 @@ export default function ManualSearch({
     setFilters([]);
     // Initialize with filters from AI results if available
     if (aiResults) {
-      const aiFilters = convertAIResultsToFilters(aiResults);
-      setPendingFilters(aiFilters);
+      setPendingFilters(aiResults.filters);
     } else {
       setPendingFilters([{
         column: "",
@@ -617,7 +438,7 @@ export default function ManualSearch({
       console.log("=== FILTER VALIDATION DEBUG ===");
       console.log("availableColumns:", availableColumns);
       
-      const aiFilters = convertAIResultsToFilters(aiResults);
+      const aiFilters = aiResults.filters;
       console.log("aiFilters before validation:", aiFilters);
       
       // Validate that all AI-generated filter columns exist in available columns
@@ -655,7 +476,7 @@ export default function ManualSearch({
     // If there are no pending filters, add one empty filter rule
     if (pendingFilters.length === 0) {
       if (aiResults) {
-        const aiFilters = convertAIResultsToFilters(aiResults);
+        const aiFilters = aiResults.filters;
         setPendingFilters(aiFilters);
       } else {
         setPendingFilters([{
@@ -723,7 +544,7 @@ export default function ManualSearch({
         setFilters(userFilters);
       } else if (aiResults) {
         // Use AI results to populate filters
-        const aiFilters = convertAIResultsToFilters(aiResults);
+        const aiFilters = aiResults.filters;
         setFilters(aiFilters);
         setPendingFilters(aiFilters);
       } else {
@@ -929,47 +750,6 @@ export default function ManualSearch({
       setExporting(false);
       setExportError("Export failed");
     };
-  }
-
-  // Helper function to get user-friendly column mapping info
-  function getColumnMappingInfo(tableId) {
-    switch (tableId) {
-      case "usa4_new_v2":
-        return {
-          jobTitle: "Job title",
-          industry: "Industry", 
-          location: "Region",
-          dbName: "USA Professionals"
-        };
-      case "eap1_new_v2":
-        return {
-          jobTitle: "person_title",
-          industry: "person_detailed_function (98% coverage)", 
-          location: "person_location_country (98% coverage)",
-          dbName: "Global B2B Contacts"
-        };
-      case "otc1_new_v2": 
-        return {
-          jobTitle: "job_title",
-          industry: "industry",
-          location: "location_country",
-          dbName: "International Professionals"
-        };
-      case "deez_3_v3":
-        return {
-          jobTitle: "Not applicable (businesses)",
-          industry: "search_keyword (100% coverage)",
-          location: "city (99.6% coverage)",
-          dbName: "US Local Businesses"
-        };
-      default:
-        return {
-          jobTitle: "Job title",
-          industry: "Industry",
-          location: "Region",
-          dbName: "Database"
-        };
-    }
   }
 
   // ------------------------
