@@ -114,6 +114,7 @@ Follow these strict guidelines:
 5. Do NOT infer parameters that aren't clearly indicated by the user
 6. Make sure all parameters extracted are found in the database schema provided
 7. For fields with low coverage (<20%), include a warning note about potential limited results
+8. If the user is requesting data that we do not have, do not include any additional filters.
 
 If no additional parameters are identified, return:
 {

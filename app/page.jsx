@@ -98,14 +98,14 @@ export default function Search() {
         });
       } else {
         // Normal processing
-        if (data.recommendedDatabase) {
-          setRecommendedDatabase(data.recommendedDatabase);
-        }
-        if (data.actualDatabase) {
-          setActualDatabase(data.actualDatabase);
-        }
-        setApiResults(data);
-        setIsVerifyingTitles(false);
+      if (data.recommendedDatabase) {
+        setRecommendedDatabase(data.recommendedDatabase);
+      }
+      if (data.actualDatabase) {
+        setActualDatabase(data.actualDatabase);
+      }
+      setApiResults(data);
+      setIsVerifyingTitles(false);
       }
     } catch (error) {
       console.error("API call failed:", error);

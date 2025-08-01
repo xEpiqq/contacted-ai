@@ -430,17 +430,49 @@ function getExtractionPrompt(database) {
   } else {
     // Professionals prompt  
     basePrompt = `
-      You are a content extractor. Extract relevant search criteria from the user's query.
+      You are a content extractor with 3 separate functions.
+      YOU DO NOT NEED TO EXTRACT KEYWORDS WHERE NONE EXIST OR THEY HAVE ALREADY BEEN REASONABLY COVERED BY ANOTHER FUNCTION.
 
-      FOR JOB TITLES:
-      Translate the query into job title keywords for searching LinkedIn users. Generate terms that would appear as actual professional titles. Aim for 10 keywords max. Use "contains" search logic - avoid redundant terms.
+      IMPORTANT:
+      - Sometimes the user will specify multiple job titles, multiple industries, multiple locations, generate the appropriate
+      amount of keywords accordingly.
+      
+      JOB EXTRACTOR FUNCTION:
+      This function's purpose is to take the "USERS QUERY" which is written in 
+      natural language, and translate it into a set of keywords that can be used to search a database of linkedin users.
+      Within this database of linkedin users is a field called "job title", which is where your terms will be plugged
+      in to locate these people. These terms must be good. Good, as in, would likely appear as someones actual
+      professional title on linkedin. Generally speaking, the more keywords you produce THE BETTER. But don't do 
+      so at the expense of data accuracy. Meaning, producing keywords that will likely include people in the results
+      that are not true to the users natural language query. Aim for 10 keywords. Feel free to generate less if you 
+      believe it will hurt the integrity of the results.
+      KEEP IN MIND:
+      1. We are using a "contains" operator to search, rather than a perfect string match. If the word or set of
+          words is contained it will appear. Hence, by way of analogy, "knife" "sharp knife" "dull knife" would be 
+          redundant, say, if the user were allowed to search for silverware--once again, this is an analogy,
+          but the point stands. You could encapsulate all knifes with a singular term.
+      2. Do not include keywords that would likely encapsulate a large number of unrelated jobs. 
+          For example, "Senior" as a singular search term would likely be a bad idea. Many job titles within many
+          industries may contain that word.
 
-      FOR INDUSTRY KEYWORDS:
-      Extract 1-2 industry keywords (preferably 1 word) that represent the industry the user is targeting. Only if explicitly stated/implied. Don't be redundant with job titles.
+      KEYWORD EXTRACTOR FUNCTION:
+      Extract 1-2 industry keywords (preferably 1 word) that represent the industry the user is targeting. 
+      Only if explicitly stated/implied. Don't be redundant with job titles. Where relevant is key. DO NOT be redundant
+      (producing industry keyword where search would clearly be covered by job title alone) Example of redundancy: If i was
+      looking for "carpenters" for example, job titles would be sufficient, and the industry keyword "carpentry" would be redundant.
+      If industry explicitly stated / implied, then go ahead.
 
-      Where relevant is key. Don't be redundant (producing industry keyword where search would clearly be covered by job title alone)
+      LOCATION EXTRACTOR FUNCTION:
+      Understand that this role is the most reductive, meaning, when you limit a query to a geographical location,
+      you will by design be cutting the size of the results a lot. Your main objective in all cases is to maximize the
+      results while still being accurate to the users natural language query. 
+      KEEP IN MIND:
+      1. If user just specifies a country, and that country is the US, that has already been handled by the database
+      that was chosen prior (it is a usa database), thus never add it in the query.
+      2. In some cases the user will specifies multiple cities, states, countries, etc. Feel free to generate the
+      appropriate amount of keywords to include all of their given locations.
+      3. The user may give a vague location such as "springfield", I consider it vague because there are many springfields
 
-      If i was looking for "carpenters" for example, job titles would be sufficient, and the industry keyword "carpentry" would be redundant. If industry explicitly stated / implied, then go ahead.
     `;
   }
 
@@ -465,19 +497,36 @@ export async function POST(request) {
         CRITICAL FIELD RULES:
         - If needsFollowUp = true: ONLY return needsFollowUp and followUpReason (omit database and needsAdditionalFilters)
         - If needsFollowUp = false: ONLY return needsFollowUp, database, and needsAdditionalFilters (omit followUpReason)
+        - set needsAdditionalFilters = true if the USERS QUERY is requesting data beyond basic job title/industry/location
 
-        DATABASES:
-        - usa4_new_v2: US professionals
-        - otc1_new_v2: International professionals  
-        - eap1_new_v2: Global B2B contacts
-        - deez_3_v3: US local businesses
-Okay so
-        SET needsFollowUp = true if: B2C data requests, non-US local businesses, or unclear professional vs business type (eg "solar contacts")
-        Make the follow up reason short, concise, simple, actionable, friendly, no jargon, 1 sentence. Reject b2c data requests and non-us local biz requests.
-        ask for clarification in other cases.
+        Select the best database below based on the USER'S QUERY.
+        Note: think through these questions.
+        - Does the user want people or local businesses? (choose deez_3_v3 if local businesses)
+        - Does the user want people inside the united states? (choose usa4_new_v2, or eap1_new_v2 with country "united states")
+        - Does the user want people outside the united states? (choose otc1_new_v2 if so)
+        If no location is specified, assume the user wants people inside the united states.
+        
+        Here are all the columns in all of our databases, plus 1 example for each of what data might be in them:
+        US Local Businesses Datbase (deez_3_v3):
+        search_keyword: [Car Dealership], name: [Dino's Audio Video], phone: [13367637120], email: [pagespastbooks@gmail.com], website: [http://dinos-av.com], address: [3116 Battleground Ave], category: [Auto Customization], city: [Greensboro], country: [US], region: [NC], search_city: [Greensboro], zip: [27408], ads_facebook: [1.0], ads_instagram: [1.0], ads_messenger: [1.0], ads_yelp: [1.0], domain_expiration: [2025-03-23 00:00:00.000], domain_nameserver: [hostgator.com], domain_registrar: [Launchpad.com Inc.], domain_registration: [2014-03-23 00:00:00.000], email_host: [google.com], facebook: [https://www.facebook.com/landrover], facebookpixel: [n], facebookreviewscount: [88.0], facebookstars: [4.9], g_maps: [claimed], g_maps_claimed: [https://maps.google.com/maps/place/Dino's+Audio+Video/@36.11686706543,-79.838005065918,17z/data=!3m1!4b1!4m5!3m4!1s0x0:0x57935964FAC1AEB3!8m2!3d36.11686706543!4d-79.838005065918], google_rank: [5.0], googleanalytics: [n], googlepixel: [n], googlereviewscount: [117.0], googlestars: [4.6], instagram: [https://www.instagram.com/dinos_av], instagram_average_comments: [1.0], instagram_average_likes: [21.0], instagram_category: [Auto Dealers], instagram_followers: [2150.0], instagram_following: [446.0], instagram_highlight_reel_count: [23.0], instagram_is_business_account: [1.0], instagram_is_verified: [1.0], instagram_media_count: [499.0], instagram_name: [Dino's Audio Video], linkedin: [https://www.linkedin.com/company/ivoiremotor-s.a], linkedinanalytics: [n], mobilefriendly: [y], seo_schema: [n], twitter: [https://www.twitter.com/dno5577], uses_shopify: [n], uses_wordpress: [n], yelpreviewscount: [121.0], yelpstars: [2.5]
+        USA Professionals Database (usa4_new_v2):
+        Full name: [lisa rice], Job title: [client care coordinator], Emails: [lisa.rice@shaneco.com], Phone numbers: [+15026496466], Company Size: [501-1000], Years Experience: [11], Twitter Username: [pivierone], Twitter Url: [twitter.com/pivierone], Summary: [CSA II Shane Company], Sub Role: [nursing], Street Address: [823 west maxwell street], Start Date: [2017], Skills: [customer service], Region: [kentucky], Postal Code: [40508], Mobile: [15026496466], Original Values - [LinkedIn Url]: [linkedin.com/in/lisa-rice-971bb26b], Middle Name: [lou], Middle Initial: [h], Metro: [louisville, kentucky], Location Geo: [38.25,-85.75], Location Country: [united states], Location Continent: [north america], Location: [louisville, kentucky, united states], Locality: [louisville], Linkedin Connections: [170], LinkedIn Username: [lisa-rice-971bb26b], LinkedIn Url: [https://www.linkedin.com/in/lisa-rice-971bb26b], Last Updated: [2020-09-01 00:00:00.000], Last Name: [rice], Job Summary: [Internal Medicine/Family Practice], Interests: [new technology], Inferred Salary: [55,000-70,000], Industry 2: [health], Industry: [retail], Github Username: [twitter.com/swdesignpros], Github Url: [sherwin williams], Gender: [female], First Name: [lisa], Facebook Username: [pam.coe], Facebook Url: [facebook.com/pam.coe], Countries: [united states], Company Website: [state.ky.us], Company Twitter Url: [twitter.com/cedarlakeky], Company Name: [university of louisville physicians], Company Location Street Address: [401 east chestnut street], Company Location Region: [kentucky], Company Location Postal Code: [40202], Company Location Name: [louisville, kentucky, united states], Company Location Metro: [louisville, kentucky], Company Location Locality: [louisville], Company Location Geo: [38.25,-85.75], Company Location Country: [united states], Company Location Continent: [north america], Company Location Address Line 2: [suite 404], Company Linkedin Url: [linkedin.com/company/university-of-louisville-physicians], Company Industry: [hospital & health care], Company Founded: [2011.0], Company Facebook Url: [facebook.com/kydeptofed], Birth Year: [1971.0], Birth Date: [1971-07-18], Address Line 2: [apartment 2]
+        International Professionals (otc1_new_v2):
+        full_name: [yağız aksakaloğlu], job_title: [akbank aksaray Å ubesiÌ], email: [yaaz3158@hotmail.com], phone_number: [+905555372142], Original Values - [linkedin_url]: [linkedin.com/in/yağız-aksakaloğlu-50a02744], address_line_2: [https://www.linkedin.com/in/ebru-yakin-3216a841], birth_date: [ebru-yakin-3216a841], birth_year: [1970], company_facebook_url: [facebook.com/temavakfi], company_founded: [1973], company_industry: [banking], company_linkedin_url: [linkedin.com/company/akbank], company_location_address_line_2: [N/A], company_location_continent: [asia], company_location_country: [turkey], company_location_geo: [38.45,37.86], company_location_locality: [i̇zmir], company_location_metro: [i̇stanbul], company_location_name: [izmir, turkey], company_location_postal_code: [35620], company_location_region: [i̇zmir], company_location_street_address: [barbaros mah. begonya sok. no:3], company_name: [akbank], company_size: [10001+], company_twitter_url: [twitter.com/temavakfi], company_website: [akbank.com], countries: [turkey], facebook_url: [facebook.com/asimas98], facebook_username: [asimas98], first_name: [yağız], gender: [male], github_url: [github.com/asimas98], github_username: [asimas98], id: [47304485], industry: [public policy], industry_2: [N/A], inferred_salary: [<$50k], interests: [economic development], job_summary: [technical lead at vestel defense industry co. location ankara, turkey industry defense & space], last_name: [aksakaloğlu], last_updated: [2018-12-01 00:00:00.000], last_updated_2: [2018-12-01 00:00:00.000], linkedin_connections: [0], linkedin_url: [https://www.linkedin.com/in/yağız-aksakaloğlu-50a02744], linkedin_username: [yağız-aksakaloğlu-50a02744], locality: ["aydin, turkey"], location: [turkey], location_continent: [asia], location_country: [turkey], location_geo: [37.8380,27.8456], metro: [aydin], middle_initial: [a], middle_name: [ali], mobile: [905555372142], postal_code: [09100], region: [aydin], skills: [c++], start_date: [2011-06-01], street_address: [efeler], sub_role: [management], summary: ["specialties: c++, java, c"], twitter_url: [twitter.com/asimas98], twitter_username: [asimas98], years_experience: [13]
+        Global B2B Contacts (eap1_new_v2):
+        person_name: [Phil Vu], person_title: [Director of Tech Support and Customer Service], person_email: [phil.vu@policymap.com], person_phone: [(215) 574-5896], Company Name: [policymap llc], Original Values - [person_linkedin_url]: [http://www.linkedin.com/in/phil-vu-b68b5a3], current_organization_ids: [['556d782873696411bc7f1a01']], id: [59d2bb78f3e5bb2e259c2d7a], index: [contacts_v5], job_start_date: [2013-10-01], modality: [contacts], person_detailed_function: [tech support customer service], person_email_analyzed: [phil.vu@policymap.com], person_email_status_cd: [Verified], person_excluded_by_team_ids: [N/A], person_extrapolated_email_confidence: [0.6], person_first_name_unanalyzed: [phil], person_functions: [['support']], person_last_name_unanalyzed: [vu], person_linkedin_url: [https://www.linkedin.com/in/phil-vu-b68b5a3], person_location_city: [Philadelphia], person_location_city_with_state_or_country: [Philadelphia, Pennsylvania], person_location_country: [United States], person_location_geojson: [{'type': 'envelope', 'coordinates': [[-90.320515, 38.774349], [-90.166409, 38.5318519]]}], person_location_postal_code: [19107], person_location_state: [Pennsylvania], person_location_state_with_country: [Pennsylvania, US], person_name_unanalyzed_downcase: [phil vu], person_num_linkedin_connections: [369.0], person_sanitized_phone: [+12155745896], person_seniority: [director], person_title_normalized: [director tech support customer service], predictive_scores: [{'551e3ef07261695147160000': 0.9615956074326348}], primary_title_normalized_for_faceting: [Director Of Tech Support And Customer Service], prospected_by_team_ids: [['59d2b71e9d79686ff4fbc262']], random: [0.2777291135862469], relavence_boost: [0.591350300563827], score: [1], type: [contact]
 
-        For normal queries: Select database + set needsAdditionalFilters = true if query has gender/company size/skills/experience, etc, requirements beyond basic job/industry/location
-        also, frequently, the user may be looking for people that work at a specific company. This would be a good additional filter.
+        Followup to the frontend may be required in two circumstances (set needsFollowUp = true if so):
+        1. No columns within our databases could reasonable satisfy the request
+        2. The user is being vague, or again, wants data we don't have
+        - Requesting a local business outside of the united states (we dont have that data)
+        - Unclear if they want people contacts or company contacts, "solar contacts" doesn't mean either
+        - Location is not specific enough, "x in springfield" is vague, "x in springfield, illinois" is not. Some cities
+        are certainly unique enough to be used as standalone, but many cities are not.
+        Note: do not make the user specify a location if no location is specified.
+        Note: do not tell the user to specify data that we don't have
+
+        If followup is used, make it short, concise, simple, actionable, friendly, no jargon, 1 sentence.
         `,
       prompt: `USERS QUERY: "${description}"`,
       temperature: 0
@@ -491,31 +540,31 @@ Okay so
     });
   }
 
-  // Get database-specific column configuration
-  const dbConfig = DATABASE_MAPPINGS[dbSelection.database];
+    // Get database-specific column configuration
+    const dbConfig = DATABASE_MAPPINGS[dbSelection.database];
 
-  // Step 2: Content Extraction
-  const { object: extraction } = await generateObject({
-    model: openai('gpt-4.1'),
-    schema: ExtractionSchema,
+    // Step 2: Content Extraction
+    const { object: extraction } = await generateObject({
+      model: openai('gpt-4.1'),
+      schema: ExtractionSchema,
     system: getExtractionPrompt(dbSelection.database),
-    prompt: `USERS QUERY: "${description}"`,
-    temperature: 0.3
-  });
+      prompt: `USERS QUERY: "${description}"`,
+      temperature: 0.3
+    });
 
   // Location validation no longer needed - all databases now have specialized handlers
-  let locationInfo = {
-    hasLocation: false,
-    components: { city: "", state: "", zip: "", country: "", region: "" },
-    locationFilters: []
-  };
+    let locationInfo = {
+      hasLocation: false,
+      components: { city: "", state: "", zip: "", country: "", region: "" },
+      locationFilters: []
+    };
 
   // Build the base response
   let combinedResults = {
     needsFollowUp: false,
-    database: dbSelection.database,
-    recommendedDatabase: dbSelection.database,
-    actualDatabase: dbSelection.database,
+      database: dbSelection.database,
+      recommendedDatabase: dbSelection.database,
+      actualDatabase: dbSelection.database,
     filters: [],
     hasAdditionalFilters: false,
     additionalFiltersMessage: null

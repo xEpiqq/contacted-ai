@@ -286,7 +286,7 @@ export default function ManualSearch({
       onResultsCountChange(matchingCount);
     }
   }, [matchingCount, onResultsCountChange]);
-
+  
   // Function to show filter drawer and initialize with empty filter if needed
   function toggleFilterSection() {
       // Make a copy so we can discard changes if user cancels
@@ -419,13 +419,13 @@ export default function ManualSearch({
     if (aiResults) {
       setPendingFilters(aiResults.filters);
     } else {
-      setPendingFilters([{
-        column: "",
-        condition: "contains",
-        tokens: [],
-        pendingText: "",
-        subop: ""
-      }]);
+    setPendingFilters([{
+      column: "",
+      condition: "contains",
+      tokens: [],
+      pendingText: "",
+      subop: ""
+    }]);
     }
     setVisibleColumns([]);
     setColumnWidths({});
@@ -479,13 +479,13 @@ export default function ManualSearch({
         const aiFilters = aiResults.filters;
         setPendingFilters(aiFilters);
       } else {
-        setPendingFilters([{
-          column: "",
-          condition: "contains",
-          tokens: [],
-          pendingText: "",
-          subop: ""
-        }]);
+      setPendingFilters([{
+        column: "",
+        condition: "contains",
+        tokens: [],
+        pendingText: "",
+        subop: ""
+      }]);
       }
     }
   }, []);
@@ -758,126 +758,126 @@ export default function ManualSearch({
   return (
     <div className={`bg-[#212121] text-white ${className}`}>
       <div className="max-w-7xl mx-auto px-6 py-8">
-            {/* Top Control Bar */}
-      <div className="flex justify-between items-center mb-6 mx-auto px-4 max-w-[calc(100vw-3rem)]">
-        {/* Left side: Back button, database selector, and results count */}
-        <div className="flex items-center gap-4">
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="px-2 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm flex items-center"
-              aria-label="Back to Search"
-            >
-              <ArrowLeftIcon className="h-4 w-4 text-neutral-300" />
-            </button>
-          )}
-          
-          <div className="relative" ref={tableDropdownRef}>
-            <button
-              onClick={() => setTableDropdownOpen(!tableDropdownOpen)}
-              className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm flex items-center gap-2"
-            >
-              <span>{selectedTable.name}</span>
-              <ChevronDownIcon className="h-4 w-4 text-neutral-400" />
-            </button>
-        
-            {tableDropdownOpen && (
-              <div className="absolute top-full left-0 mt-1 w-80 bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg shadow-2xl z-50 max-h-80 overflow-y-auto">
-                {DB_TABLES.map((table) => (
-                  <div
-                    key={table.id}
-                    className={`px-4 py-3 hover:bg-[#333333] cursor-pointer border-b border-[#404040] last:border-b-0 transition-colors ${
-                      selectedTable.id === table.id ? 'bg-[#333333] border-l-2 border-l-blue-500' : ''
-                    }`}
-                    onClick={() => {
-                      setSelectedTable(table);
-                      setTableDropdownOpen(false);
-                    }}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1 min-w-0 mr-2">
-                        <div className={`font-medium ${selectedTable.id === table.id ? 'text-blue-400' : 'text-white'}`}>
-                          {table.name}
-                          {selectedTable.id === table.id && (
-                            <span className="ml-2 text-xs bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">
-                              Selected
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-400 mt-1">{table.description}</div>
-                      </div>
-                      <div className="text-xs text-gray-500 whitespace-nowrap">
-                        {formatNumber(getTableCount(table))} records
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* Top Control Bar */}
+        <div className="flex justify-between items-center mb-6 mx-auto px-4 max-w-[calc(100vw-3rem)]">
+          {/* Left side: Back button, database selector, and results count */}
+          <div className="flex items-center gap-4">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="px-2 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm flex items-center"
+                aria-label="Back to Search"
+              >
+                <ArrowLeftIcon className="h-4 w-4 text-neutral-300" />
+              </button>
             )}
-          </div>
+            
+            <div className="relative" ref={tableDropdownRef}>
+              <button
+            onClick={() => setTableDropdownOpen(!tableDropdownOpen)}
+                className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm flex items-center gap-2"
+              >
+                <span>{selectedTable.name}</span>
+                <ChevronDownIcon className="h-4 w-4 text-neutral-400" />
+              </button>
           
-          {/* Results count */}
-          {userSettingsLoaded && (
-            <div className="text-sm text-white/70">
-              {countLoading ? 'Loading…' : `${formatNumber(matchingCount)} results`}
-                  </div>
-                )}
-            </div>
-
-        {/* Right side controls */}
-        <div className="flex flex-wrap items-center gap-3">
-              
-          {/* Select Columns */}
-              <button 
-                onClick={toggleColumnSelector}
-            className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm"
-              >
-            Select Columns
-              </button>
-              
-          {/* Export Data */}
-              <button 
-                onClick={toggleExportSection}
-            className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm"
-              >
-            Export Data
-              </button>
-  
-          {/* Filters */}
-                  <button 
-            onClick={toggleFilterSection}
-            className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm flex items-center gap-2"
-                  >
-            <span>Filters</span>
-            <ChevronDownIcon
-              className={`h-4 w-4 transition-transform`}
-            />
-                  </button>
-
-          {/* Filter Count Indicator - show when filters exist */}
-                {filters.length > 0 && (
-            <div className="ml-2">
-              <div className="bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs px-3 py-2 rounded-md whitespace-nowrap">
-                {filters.length} Filter{filters.length !== 1 ? 's' : ''}
-                  </div>
+          {tableDropdownOpen && (
+                <div className="absolute top-full left-0 mt-1 w-80 bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg shadow-2xl z-50 max-h-80 overflow-y-auto">
+              {DB_TABLES.map((table) => (
+                <div
+                  key={table.id}
+                      className={`px-4 py-3 hover:bg-[#333333] cursor-pointer border-b border-[#404040] last:border-b-0 transition-colors ${
+                        selectedTable.id === table.id ? 'bg-[#333333] border-l-2 border-l-blue-500' : ''
+                  }`}
+                      onClick={() => {
+                    setSelectedTable(table);
+                    setTableDropdownOpen(false);
+                  }}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1 min-w-0 mr-2">
+                          <div className={`font-medium ${selectedTable.id === table.id ? 'text-blue-400' : 'text-white'}`}>
+                        {table.name}
+                        {selectedTable.id === table.id && (
+                              <span className="ml-2 text-xs bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">
+                            Selected
+                          </span>
+                        )}
                       </div>
-                )}
-                      </div>
+                          <div className="text-xs text-gray-400 mt-1">{table.description}</div>
                     </div>
+                        <div className="text-xs text-gray-500 whitespace-nowrap">
+                      {formatNumber(getTableCount(table))} records
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        
+            {/* Results count */}
+            {userSettingsLoaded && (
+              <div className="text-sm text-white/70">
+                {countLoading ? 'Loading…' : `${formatNumber(matchingCount)} results`}
+            </div>
+      )}
+                        </div>
+
+          {/* Right side controls */}
+          <div className="flex flex-wrap items-center gap-3">
+              
+            {/* Select Columns */}
+              <button 
+            onClick={toggleColumnSelector}
+              className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm"
+              >
+              Select Columns
+              </button>
+          
+            {/* Export Data */}
+              <button 
+            onClick={toggleExportSection}
+              className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm"
+              >
+              Export Data
+              </button>
+    
+            {/* Filters */}
+              <button 
+              onClick={toggleFilterSection}
+              className="px-4 py-2 bg-[#252525] hover:bg-[#303030] border border-[#404040] rounded-md text-sm flex items-center gap-2"
+              >
+              <span>Filters</span>
+              <ChevronDownIcon
+                className={`h-4 w-4 transition-transform`}
+              />
+              </button>
+
+                        {/* Filter Count Indicator - show when filters exist */}
+            {filters.length > 0 && (
+              <div className="ml-2">
+                <div className="bg-blue-600/10 border border-blue-500/20 text-blue-400 text-xs px-3 py-2 rounded-md whitespace-nowrap">
+                  {filters.length} Filter{filters.length !== 1 ? 's' : ''}
+              </div>
+              </div>
+          )}
+            </div>
+                  </div>
 
       {/* Database Info Panel removed */}
- 
-      {/* Main Search Interface */}
-      <div className="flex flex-col lg:flex-row gap-6">
+      
+        {/* Main Search Interface */}
+        <div className="flex flex-col lg:flex-row gap-6">
         {/* Left Sidebar removed - all panels now modals */}
         
-        {/* Main Content Area */}
-        <div className="flex-1 min-w-0">
+          {/* Main Content Area */}
+          <div className="flex-1 min-w-0">
 
-                    {/* Results Table */}
-          {userSettingsLoaded && (
-            <div className="bg-white/5 backdrop-blur-sm rounded-2xl overflow-hidden mx-auto px-4 max-w-[calc(100vw-3rem)]">
-                              {/* Top scrollbar */}
+            {/* Results Table */}
+            {userSettingsLoaded && (
+              <div className="bg-white/5 backdrop-blur-sm rounded-2xl overflow-hidden mx-auto px-4 max-w-[calc(100vw-3rem)]">
+                {/* Top scrollbar */}
                 <div 
                   className="overflow-x-auto overflow-y-hidden h-4 mb-2 px-6 pt-4" 
                   style={{ 
@@ -891,7 +891,7 @@ export default function ManualSearch({
                       tableContainer.scrollLeft = e.target.scrollLeft;
                     }
                   }}
-                                >
+                >
                   <style jsx>{`
                     .overflow-x-auto::-webkit-scrollbar-vertical {
                       display: none;
@@ -902,170 +902,170 @@ export default function ManualSearch({
                   `}</style>
                   <div style={{ height: '1px', width: 'max-content', minWidth: '100%' }}>
                     <table className="w-full invisible">
-                    <thead>
-                      <tr>
-                        {visibleColumns.map((col) => (
-                          <th
-                            key={col}
-                            style={{
-                              width: columnWidths[col] || "auto",
-                              minWidth: "150px",
-                            }}
-                          />
-              ))}
-                      </tr>
-                    </thead>
-                  </table>
-            </div>
-          </div>
-
-
-                
-                                 <div 
-                   className="table-container overflow-x-auto overflow-y-hidden" 
-                   style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                   onScroll={(e) => {
-                     const topScrollbar = e.target.parentElement.querySelector('.overflow-x-auto');
-                     if (topScrollbar) {
-                       topScrollbar.scrollLeft = e.target.scrollLeft;
-                     }
-                   }}
-                 >
-                   <style jsx>{`
-                     .table-container::-webkit-scrollbar {
-                       display: none;
-                     }
-                     .table-container::-webkit-scrollbar-vertical {
-                       display: none;
-                     }
-                   `}</style>
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-white/10 backdrop-blur-sm border-b border-[#333333]">
-                      {visibleColumns.map((col) => (
-                        <th
-                          key={col}
-                          className="relative group py-4 px-6 text-sm font-semibold text-white/80 text-left first:pl-6 last:pr-6 border-0"
-                          style={{
-                            width: columnWidths[col] || "auto",
-                            minWidth: "150px",
-                          }}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span>{col}</span>
-                            <div
-                              className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                const startX = e.pageX;
-                                const startWidth =
-                                  e.currentTarget.parentElement.offsetWidth;
-                                const onMouseMove = (moveEvt) => {
-                                  const newWidth =
-                                    startWidth + (moveEvt.pageX - startX);
-                                  if (newWidth > 100) {
-                                    setColumnWidths((prev) => ({
-                                      ...prev,
-                                      [col]: `${newWidth}px`,
-                                    }));
-                                  }
-                                };
-                                const onMouseUp = () => {
-                                  document.removeEventListener(
-                                    "mousemove",
-                                    onMouseMove
-                                  );
-                                  document.removeEventListener(
-                                    "mouseup",
-                                    onMouseUp
-                                  );
-                                };
-                                document.addEventListener("mousemove", onMouseMove);
-                                document.addEventListener("mouseup", onMouseUp);
+                      <thead>
+                        <tr>
+                          {visibleColumns.map((col) => (
+                            <th
+                              key={col}
+                              style={{
+                                width: columnWidths[col] || "auto",
+                                minWidth: "150px",
                               }}
                             />
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rowsLoading
-                      ? Array.from({ length: limit }).map((_, i) => (
-                          <tr key={i} className={`animate-pulse ${i % 2 === 0 ? 'bg-[#252525]' : 'bg-[#1e1e1e]'}`}>
-                            {visibleColumns.map((c) => (
-                              <td key={c} className="py-4 px-6 first:pl-6 last:pr-6 border-0">
-                                <div className="h-4 bg-white/10 rounded-lg w-full" />
-                              </td>
-                            ))}
-                          </tr>
-                        ))
-                      : results.map((row, i) => (
-                          <tr key={i} className={`hover:bg-[#333333]/40 transition-all duration-200 ${i % 2 === 0 ? 'bg-[#252525]' : 'bg-[#1e1e1e]'}`}>
-                            {visibleColumns.map((c) => (
-                              <td
-                                key={c}
+                          ))}
+                        </tr>
+                      </thead>
+                    </table>
+                </div>
+          </div>
+      
+        
+
+                <div 
+                  className="table-container overflow-x-auto overflow-y-hidden" 
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                  onScroll={(e) => {
+                    const topScrollbar = e.target.parentElement.querySelector('.overflow-x-auto');
+                    if (topScrollbar) {
+                      topScrollbar.scrollLeft = e.target.scrollLeft;
+                    }
+                  }}
+                >
+                  <style jsx>{`
+                    .table-container::-webkit-scrollbar {
+                      display: none;
+                    }
+                    .table-container::-webkit-scrollbar-vertical {
+                      display: none;
+                    }
+                  `}</style>
+                  <table className="w-full">
+              <thead>
+                      <tr className="bg-white/10 backdrop-blur-sm border-b border-[#333333]">
+                  {visibleColumns.map((col) => (
+                    <th
+                      key={col}
+                            className="relative group py-4 px-6 text-sm font-semibold text-white/80 text-left first:pl-6 last:pr-6 border-0"
+                      style={{
+                        width: columnWidths[col] || "auto",
+                        minWidth: "150px",
+                      }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span>{col}</span>
+                        <div
+                                className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            const startX = e.pageX;
+                            const startWidth =
+                              e.currentTarget.parentElement.offsetWidth;
+                            const onMouseMove = (moveEvt) => {
+                              const newWidth =
+                                startWidth + (moveEvt.pageX - startX);
+                              if (newWidth > 100) {
+                                setColumnWidths((prev) => ({
+                                  ...prev,
+                                  [col]: `${newWidth}px`,
+                                }));
+                              }
+                            };
+                            const onMouseUp = () => {
+                              document.removeEventListener(
+                                "mousemove",
+                                onMouseMove
+                              );
+                              document.removeEventListener(
+                                "mouseup",
+                                onMouseUp
+                              );
+                            };
+                            document.addEventListener("mousemove", onMouseMove);
+                            document.addEventListener("mouseup", onMouseUp);
+                          }}
+                        />
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rowsLoading
+                  ? Array.from({ length: limit }).map((_, i) => (
+                            <tr key={i} className={`animate-pulse ${i % 2 === 0 ? 'bg-[#252525]' : 'bg-[#1e1e1e]'}`}>
+                        {visibleColumns.map((c) => (
+                                <td key={c} className="py-4 px-6 first:pl-6 last:pr-6 border-0">
+                                  <div className="h-4 bg-white/10 rounded-lg w-full" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  : results.map((row, i) => (
+                            <tr key={i} className={`hover:bg-[#333333]/40 transition-all duration-200 ${i % 2 === 0 ? 'bg-[#252525]' : 'bg-[#1e1e1e]'}`}>
+                        {visibleColumns.map((c) => (
+                          <td
+                            key={c}
                                 className="py-4 px-6 text-sm text-white/90 first:pl-6 last:pr-6 border-0"
-                              >
+                          >
                                 <div className="truncate font-medium">
                                   {row[c] && row[c].length > 40 ? `${row[c].substring(0, 40)}...` : row[c]}
                                 </div>
-                              </td>
-                            ))}
-                          </tr>
+                          </td>
                         ))}
-                  </tbody>
-                </table>
-              </div>
+                      </tr>
+                    ))}
+              </tbody>
+            </table>
+          </div>
 
-              {/* Pagination */}
-              <div className="px-6 py-5 flex items-center justify-between">
-                <div className="text-sm text-white/70">
-                  {results.length > 0 ? (
-                    <>Showing {results.length} of {formatNumber(matchingCount)} results</>
-                  ) : (
-                    <>No results found</>
-                  )}
-                </div>
-                <div className="flex gap-3">
-                  <button 
-                    onClick={prevPage} 
-                    disabled={page === 0}
-                    className={`px-5 py-2.5 text-sm rounded-lg font-medium transition-all duration-200 ${page === 0 ? 'bg-white/5 text-white/30 border-white/10 cursor-not-allowed' : 'bg-white/5 hover:bg-white/10 backdrop-blur-sm text-white border-white/10 hover:border-white/20'}`}
-                  >
-                    Previous
-                  </button>
-                  <button 
-                    onClick={nextPage} 
-                    disabled={
-                      page >=
-                      Math.min(
-                        totalPages - 1,
-                        tokensTotal !== null && tokensTotal <= 201 ? 4 : 24
-                      )
-                    }
-                    className={`px-5 py-2.5 text-sm rounded-lg font-medium transition-all duration-200 ${
-                      page >=
-                      Math.min(
-                        totalPages - 1,
-                        tokensTotal !== null && tokensTotal <= 201 ? 4 : 24
-                      )
-                        ? 'bg-white/5 text-white/30 border-white/10 cursor-not-allowed'
-                        : 'bg-white/5 hover:bg-white/10 backdrop-blur-sm text-white border-white/10 hover:border-white/20'
-                    }`}
-                  >
-                    Next
-                  </button>
-                </div>
+        {/* Pagination */}
+                <div className="px-6 py-5 flex items-center justify-between">
+                  <div className="text-sm text-white/70">
+                    {results.length > 0 ? (
+                      <>Showing {results.length} of {formatNumber(matchingCount)} results</>
+                    ) : (
+                      <>No results found</>
+            )}
+                  </div>
+                  <div className="flex gap-3">
+                <button 
+                onClick={prevPage} 
+                disabled={page === 0}
+                      className={`px-5 py-2.5 text-sm rounded-lg font-medium transition-all duration-200 ${page === 0 ? 'bg-white/5 text-white/30 border-white/10 cursor-not-allowed' : 'bg-white/5 hover:bg-white/10 backdrop-blur-sm text-white border-white/10 hover:border-white/20'}`}
+                >
+                Previous
+                </button>
+              <button 
+                onClick={nextPage} 
+                disabled={
+                  page >=
+                  Math.min(
+                    totalPages - 1,
+                    tokensTotal !== null && tokensTotal <= 201 ? 4 : 24
+                  )
+                }
+                      className={`px-5 py-2.5 text-sm rounded-lg font-medium transition-all duration-200 ${
+                  page >=
+                  Math.min(
+                    totalPages - 1,
+                    tokensTotal !== null && tokensTotal <= 201 ? 4 : 24
+                  )
+                          ? 'bg-white/5 text-white/30 border-white/10 cursor-not-allowed'
+                          : 'bg-white/5 hover:bg-white/10 backdrop-blur-sm text-white border-white/10 hover:border-white/20'
+                }`}
+              >
+                Next
+              </button>
+                  </div>
               </div>
             </div>
           )}
-        </div>
       </div>
-    </div>
+      </div>
+      </div>
             
       {/* Column Selection Modal */}
-              {showColumnSelector && (
+      {showColumnSelector && (
         <>
           {/* Semi-transparent overlay */}
           <div className="fixed inset-0 bg-black/60 z-40" />
@@ -1085,53 +1085,53 @@ export default function ManualSearch({
                 </p>
                   
                 <div className="mb-6">
-                    <input
-                      type="text"
-                      placeholder="Search columns..."
-                      value={columnSearch}
-                      onChange={(e) => setColumnSearch(e.target.value)}
+                  <input
+                    type="text"
+                    placeholder="Search columns..."
+                    value={columnSearch}
+                    onChange={(e) => setColumnSearch(e.target.value)}
                     className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
-                    />
-                  </div>
+                  />
+                </div>
                   
                 <div className="max-h-60 overflow-y-auto space-y-1 mb-6">
-                    {/* Select All Option */}
-                    <label className="flex items-center gap-3 cursor-pointer py-3 px-4 hover:bg-[#333333] rounded-lg transition-all duration-200 border-b border-[#404040] mb-2">
-                                              <input
-                          type="checkbox"
-                          checked={visibleColumns.length === filteredAvailableColumns.length}
-                          onChange={() => {
-                            if (visibleColumns.length === filteredAvailableColumns.length) {
-                              // Deselect all
-                              setVisibleColumns([]);
-                            } else {
-                              // Select all - prioritize default columns first
-                              const defaultCols = selectedTable.defaultColumns.filter(col => 
-                                filteredAvailableColumns.includes(col)
-                              );
-                              const otherCols = filteredAvailableColumns.filter(col => 
-                                !selectedTable.defaultColumns.includes(col)
-                              );
-                              setVisibleColumns([...defaultCols, ...otherCols]);
-                            }
-                          }}
-                          className="h-4 w-4 accent-blue-500 rounded"
-                        />
-                      <span className="text-sm text-gray-300 font-medium">Select all</span>
-                    </label>
-                    
-                    {filteredAvailableColumns.map((col) => (
-                    <label key={col} className="flex items-center gap-3 cursor-pointer py-3 px-4 hover:bg-[#333333] rounded-lg transition-all duration-200">
-                        <input
-                          type="checkbox"
-                          checked={visibleColumns.includes(col)}
-                          onChange={() => toggleColumn(col)}
+                  {/* Select All Option */}
+                  <label className="flex items-center gap-3 cursor-pointer py-3 px-4 hover:bg-[#333333] rounded-lg transition-all duration-200 border-b border-[#404040] mb-2">
+                                          <input
+                        type="checkbox"
+                        checked={visibleColumns.length === filteredAvailableColumns.length}
+                        onChange={() => {
+                          if (visibleColumns.length === filteredAvailableColumns.length) {
+                            // Deselect all
+                            setVisibleColumns([]);
+                          } else {
+                            // Select all - prioritize default columns first
+                            const defaultCols = selectedTable.defaultColumns.filter(col => 
+                              filteredAvailableColumns.includes(col)
+                            );
+                            const otherCols = filteredAvailableColumns.filter(col => 
+                              !selectedTable.defaultColumns.includes(col)
+                            );
+                            setVisibleColumns([...defaultCols, ...otherCols]);
+                          }
+                        }}
                         className="h-4 w-4 accent-blue-500 rounded"
-                        />
+                      />
+                    <span className="text-sm text-gray-300 font-medium">Select all</span>
+                  </label>
+                  
+                  {filteredAvailableColumns.map((col) => (
+                    <label key={col} className="flex items-center gap-3 cursor-pointer py-3 px-4 hover:bg-[#333333] rounded-lg transition-all duration-200">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.includes(col)}
+                        onChange={() => toggleColumn(col)}
+                        className="h-4 w-4 accent-blue-500 rounded"
+                      />
                       <span className="text-sm text-gray-300">{col}</span>
-                      </label>
-                    ))}
-                  </div>
+                    </label>
+                  ))}
+                </div>
                   
                 <div className="flex gap-3">
                   <button 
@@ -1151,10 +1151,10 @@ export default function ManualSearch({
             </div>
           </div>
         </>
-              )}
+      )}
               
       {/* Export Data Modal */}
-              {showExportSection && (
+      {showExportSection && (
         <>
           {/* Semi-transparent overlay */}
           <div className="fixed inset-0 bg-black/60 z-40" />
@@ -1170,51 +1170,51 @@ export default function ManualSearch({
               <div className="p-6">
                 <h3 className="font-medium text-lg text-white mb-2">Export Data</h3>
                   
-                  {exporting ? (
+                {exporting ? (
                   <div className="text-center py-4">
                     <div className="w-full bg-[#404040] h-2 rounded-full mb-4 overflow-hidden">
-                        <div
+                      <div
                         className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                          style={{ width: `${exportProgress}%` }}
-                        />
-                      </div>
-                    <div className="text-sm text-gray-400">
-                        {exportProgress}% Complete
-                      </div>
+                        style={{ width: `${exportProgress}%` }}
+                      />
                     </div>
-                  ) : (
-                    <>
+                    <div className="text-sm text-gray-400">
+                      {exportProgress}% Complete
+                    </div>
+                  </div>
+                ) : (
+                  <>
                     <p className="text-sm text-gray-400 mb-6 leading-relaxed">
-                        Choose how many rows to export. You'll be charged 1 token per
-                        row, but only if the export completes successfully.
-                      </p>
+                      Choose how many rows to export. You'll be charged 1 token per
+                      row, but only if the export completes successfully.
+                    </p>
                       
                     <div className="mb-6">
                       <div className="flex items-center justify-between mb-3">
                         <div className="text-sm text-gray-300">Amount</div>
                         <div className="text-xs text-gray-500">Max: 200K</div>
                       </div>
-                        <input
-                          type="number"
-                          value={rowsToExport === null ? "" : rowsToExport}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setRowsToExport(val === "" ? null : Number(val));
-                          }}
-                          min="1"
-                          max="200000"
+                      <input
+                        type="number"
+                        value={rowsToExport === null ? "" : rowsToExport}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setRowsToExport(val === "" ? null : Number(val));
+                        }}
+                        min="1"
+                        max="200000"
                         placeholder="0.00"
                         className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
-                        />
-                      </div>
+                      />
+                    </div>
                       
-                      {exportError && (
+                    {exportError && (
                       <div className="mb-6 text-sm text-red-400 bg-red-500/10 rounded-lg px-4 py-3">
                         {exportError}
                       </div>
-                      )}
+                    )}
                       
-                    {!exportDone ? (
+                                        {!exportDone ? (
                       <div className="flex gap-3">
                         <button 
                           onClick={() => setShowExportSection(false)}
@@ -1248,9 +1248,9 @@ export default function ManualSearch({
                       Export completed successfully!
                 </div>
               )}
+              </div>
             </div>
           </div>
-        </div>
         </>
       )}
 
@@ -1268,4 +1268,4 @@ export default function ManualSearch({
       {/* FiltersDrawer is now rendered at the SearchProvider level */}
     </div>
   );
-} 
+}
