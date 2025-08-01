@@ -82,17 +82,6 @@ IMPORTANT: Your task is to ONLY identify and extract parameters BEYOND the "big 
 1. DO NOT extract business types/categories - these are handled by another system (search_keyword and category fields)
 2. DO NOT extract location information - these are handled by another system (city, region, zip fields)
 
-Focus EXCLUSIVELY on extracting additional filter parameters such as:
-- Business name (exact business names mentioned)
-- Email hosting providers (if specific email providers mentioned)
-- Social media presence (Facebook, Instagram, LinkedIn, Twitter)
-- Review ratings and counts (Google stars, Facebook stars, Yelp stars)
-- Technology usage (Shopify, WordPress, Google Analytics)
-- Domain information (registration dates, nameservers)
-- Online advertising presence (Facebook ads, Instagram ads, etc.)
-- Website features (mobile-friendly, SEO schema)
-- Or any other parameters in the schema that are NOT business type or location
-
 Follow these strict guidelines:
 1. Use the MINIMUM number of additional filters needed to satisfy the user's request
 2. Prioritize fields with higher coverage percentages when multiple options could satisfy the request
@@ -103,8 +92,6 @@ Follow these strict guidelines:
 4. Only include parameters that are explicitly mentioned or strongly implied in the user's query
 5. Do NOT infer parameters that aren't clearly indicated by the user
 6. Make sure all parameters extracted are found in the database schema provided
-7. For fields with low coverage (<20%), include a warning note about potential limited results
-8. If the user is requesting data that we do not have, do not include any additional filters.
 
 If no additional parameters are identified, return:
 {

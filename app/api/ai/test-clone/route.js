@@ -9,7 +9,6 @@ const DATABASE_MAPPINGS = {
     jobTitleColumn: "Job title",
     locationColumns: ["Location", "Locality", "Region", "Postal Code", "Metro"],
     industryColumn: "Industry",
-    additionalFiltersRoute: "/api/ai/extract-usa4-additional-filters",
     locationPrompt: `
       FOR LOCATION (USA Professionals Database):
       Available columns: Location (96.0%), Locality (96.0%), Region (96.3%), Metro (81.9%), Postal Code (21.6%)
@@ -29,7 +28,6 @@ const DATABASE_MAPPINGS = {
     jobTitleColumn: "person_title",
     locationColumns: ["person_location_city", "person_location_state", "person_location_country", "person_location_postal_code", "person_location_city_with_state_or_country", "person_location_state_with_country"],
     industryColumn: "person_detailed_function",
-    additionalFiltersRoute: "/api/ai/extract-eap1-additional-filters",
     locationPrompt: `
       FOR LOCATION (Global B2B Contacts Database):
       Available columns: person_location_country (97.8%), person_location_state (92.2%), person_location_state_with_country (92.2%), person_location_city (89.0%), person_location_city_with_state_or_country (89.0%), person_location_postal_code (27.6%)
@@ -49,7 +47,6 @@ const DATABASE_MAPPINGS = {
     jobTitleColumn: "job_title",
     locationColumns: ["location", "locality", "region", "location_country", "location_continent", "metro", "postal_code"],
     industryColumn: "industry",
-    additionalFiltersRoute: "/api/ai/extract-otc1-additional-filters",
     locationPrompt: `
       FOR LOCATION (International Professionals Database):
       Available columns: location (92.89%), location_country (92.89%), location_continent (92.89%), locality (37.26%), region (37.26%), metro (29.54%), postal_code (2.11%)
@@ -64,6 +61,8 @@ const DATABASE_MAPPINGS = {
       - Use location_continent for broad regional targeting
       - AVOID postal_code unless specifically requested (very low coverage at 2.11%)
       - Set hasLocation to true if any location is mentioned, false otherwise
+      - IF THE USERS QUERY SAYS ANYTHING SIMILAR TO "OUTSIDE OF THE UNITED STATES" or "AROUND THE WORLD" or "INTERNATIONAL" 
+      this has already been handled by a different system and no additional filters are needed. 
     `
   },
   "deez_3_v3": {
@@ -71,7 +70,6 @@ const DATABASE_MAPPINGS = {
     businessTypeColumn: "search_keyword", // For business types instead of job titles
     locationColumns: ["search_city", "city", "region", "zip"],
     industryColumn: "category",
-    additionalFiltersRoute: "/api/ai/extract-deez-additional-filters",
     locationPrompt: `
       FOR LOCATION (US Local Businesses Database):
       Available columns: search_city (99.8%), city (99.6%), region (99.6%), zip (99.2%)
@@ -105,14 +103,14 @@ const ExtractionSchema = z.object({
 
 
 
-// Helper function to call the appropriate additional filters extraction API
-async function fetchAdditionalFilters(description, route) {
+// Helper function to call the consolidated additional filters extraction API
+async function fetchAdditionalFilters(description, route, database) {
   const response = await fetch(new URL(route, process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ description }),
+    body: JSON.stringify({ description, database }),
   });
   
   return await response.json();
@@ -488,7 +486,7 @@ function getExtractionPrompt(database) {
     basePrompt = `
       You are a content extractor with 3 separate functions.
       YOU DO NOT NEED TO EXTRACT KEYWORDS WHERE NONE EXIST OR THEY HAVE ALREADY BEEN REASONABLY COVERED BY ANOTHER FUNCTION.
-
+      
       IMPORTANT:
       - Sometimes the user will specify multiple job titles, multiple industries, multiple locations, generate the appropriate
       amount of keywords accordingly.
@@ -550,11 +548,6 @@ export async function POST(request) {
       model: openai('gpt-4.1'),
       schema: DatabaseSelectionSchema,
       system: `
-        CRITICAL FIELD RULES:
-        - If needsFollowUp = true: ONLY return needsFollowUp and followUpReason (omit database and needsAdditionalFilters)
-        - If needsFollowUp = false: ONLY return needsFollowUp, database, and needsAdditionalFilters (omit followUpReason)
-        - set needsAdditionalFilters = true if the USERS QUERY is requesting data beyond basic job title/industry/location
-
         Select the best database below based on the USER'S QUERY.
         Note: think through these questions.
         - Does the user want people or local businesses? (choose deez_3_v3 if local businesses)
@@ -573,7 +566,7 @@ export async function POST(request) {
         full_name: [yağız aksakaloğlu], job_title: [akbank aksaray Å ubesiÌ], email: [yaaz3158@hotmail.com], phone_number: [+905555372142], Original Values - [linkedin_url]: [linkedin.com/in/yağız-aksakaloğlu-50a02744], address_line_2: [https://www.linkedin.com/in/ebru-yakin-3216a841], birth_date: [ebru-yakin-3216a841], birth_year: [1970], company_facebook_url: [facebook.com/temavakfi], company_founded: [1973], company_industry: [banking], company_linkedin_url: [linkedin.com/company/akbank], company_location_address_line_2: [N/A], company_location_continent: [asia], company_location_country: [turkey], company_location_geo: [38.45,37.86], company_location_locality: [i̇zmir], company_location_metro: [i̇stanbul], company_location_name: [izmir, turkey], company_location_postal_code: [35620], company_location_region: [i̇zmir], company_location_street_address: [barbaros mah. begonya sok. no:3], company_name: [akbank], company_size: [10001+], company_twitter_url: [twitter.com/temavakfi], company_website: [akbank.com], countries: [turkey], facebook_url: [facebook.com/asimas98], facebook_username: [asimas98], first_name: [yağız], gender: [male], github_url: [github.com/asimas98], github_username: [asimas98], id: [47304485], industry: [public policy], industry_2: [N/A], inferred_salary: [<$50k], interests: [economic development], job_summary: [technical lead at vestel defense industry co. location ankara, turkey industry defense & space], last_name: [aksakaloğlu], last_updated: [2018-12-01 00:00:00.000], last_updated_2: [2018-12-01 00:00:00.000], linkedin_connections: [0], linkedin_url: [https://www.linkedin.com/in/yağız-aksakaloğlu-50a02744], linkedin_username: [yağız-aksakaloğlu-50a02744], locality: ["aydin, turkey"], location: [turkey], location_continent: [asia], location_country: [turkey], location_geo: [37.8380,27.8456], metro: [aydin], middle_initial: [a], middle_name: [ali], mobile: [905555372142], postal_code: [09100], region: [aydin], skills: [c++], start_date: [2011-06-01], street_address: [efeler], sub_role: [management], summary: ["specialties: c++, java, c"], twitter_url: [twitter.com/asimas98], twitter_username: [asimas98], years_experience: [13]
         Global B2B Contacts (eap1_new_v2):
         person_name: [Phil Vu], person_title: [Director of Tech Support and Customer Service], person_email: [phil.vu@policymap.com], person_phone: [(215) 574-5896], Company Name: [policymap llc], Original Values - [person_linkedin_url]: [http://www.linkedin.com/in/phil-vu-b68b5a3], current_organization_ids: [['556d782873696411bc7f1a01']], id: [59d2bb78f3e5bb2e259c2d7a], index: [contacts_v5], job_start_date: [2013-10-01], modality: [contacts], person_detailed_function: [tech support customer service], person_email_analyzed: [phil.vu@policymap.com], person_email_status_cd: [Verified], person_excluded_by_team_ids: [N/A], person_extrapolated_email_confidence: [0.6], person_first_name_unanalyzed: [phil], person_functions: [['support']], person_last_name_unanalyzed: [vu], person_linkedin_url: [https://www.linkedin.com/in/phil-vu-b68b5a3], person_location_city: [Philadelphia], person_location_city_with_state_or_country: [Philadelphia, Pennsylvania], person_location_country: [United States], person_location_geojson: [{'type': 'envelope', 'coordinates': [[-90.320515, 38.774349], [-90.166409, 38.5318519]]}], person_location_postal_code: [19107], person_location_state: [Pennsylvania], person_location_state_with_country: [Pennsylvania, US], person_name_unanalyzed_downcase: [phil vu], person_num_linkedin_connections: [369.0], person_sanitized_phone: [+12155745896], person_seniority: [director], person_title_normalized: [director tech support customer service], predictive_scores: [{'551e3ef07261695147160000': 0.9615956074326348}], primary_title_normalized_for_faceting: [Director Of Tech Support And Customer Service], prospected_by_team_ids: [['59d2b71e9d79686ff4fbc262']], random: [0.2777291135862469], relavence_boost: [0.591350300563827], score: [1], type: [contact]
-
+        
         Followup to the frontend may be required in two circumstances (set needsFollowUp = true if so):
         1. No columns within our databases could reasonable satisfy the request
         2. The user is being vague, or again, wants data we don't have
@@ -585,10 +578,27 @@ export async function POST(request) {
         Note: do not tell the user to specify data that we don't have
 
         If followup is used, make it short, concise, simple, actionable, friendly, no jargon, 1 sentence.
+
+        RITICAL FIELD RULES:
+        - If needsFollowUp = true: ONLY return needsFollowUp and followUpReason (omit database and needsAdditionalFilters)
+        - If needsFollowUp = false: ONLY return needsFollowUp, database, and needsAdditionalFilters (omit followUpReason)
+        - Set needsAdditionalFilters = true if the USERS QUERY is requesting data other than job title, industry, location.
+
         `,
       prompt: `USERS QUERY: "${description}"`,
       temperature: 0
     });
+
+  // Debug logging for database selection
+  console.log('=== DATABASE SELECTION DEBUG ===');
+  console.log('Query:', description);
+  console.log('Database selected:', dbSelection.database);
+  console.log('Needs follow-up:', dbSelection.needsFollowUp);
+  console.log('Needs additional filters:', dbSelection.needsAdditionalFilters);
+  if (dbSelection.followUpReason) {
+    console.log('Follow-up reason:', dbSelection.followUpReason);
+  }
+  console.log('===============================');
 
   // If follow-up is needed, return early with follow-up reason
   if (dbSelection.needsFollowUp) {
@@ -601,45 +611,71 @@ export async function POST(request) {
     // Get database-specific column configuration
     const dbConfig = DATABASE_MAPPINGS[dbSelection.database];
 
-    // Step 2: Content Extraction
-    const { object: extraction } = await generateObject({
+    // Step 2 & 3: Run extraction and additional filters in parallel if both needed
+    let extraction, additionalFiltersData = [];
+    
+    if (dbSelection.needsAdditionalFilters) {
+      // Parallel execution when additional filters are needed
+      console.log('=== CALLING ADDITIONAL FILTERS ===');
+      console.log('Route:', "/api/ai/extract-usa4-additional-filters");
+      console.log('Query being sent:', description);
+      
+      const [extractionResult, additionalFiltersResponse] = await Promise.all([
+        generateObject({
       model: openai('gpt-4.1'),
       schema: ExtractionSchema,
-    system: getExtractionPrompt(dbSelection.database),
+          system: getExtractionPrompt(dbSelection.database),
+          prompt: `USERS QUERY: "${description}"`,
+          temperature: 0.3
+        }),
+        fetchAdditionalFilters(description, "/api/ai/extract-usa4-additional-filters", dbSelection.database)
+      ]);
+      
+      extraction = extractionResult.object;
+      
+      console.log('=== ADDITIONAL FILTERS RESPONSE ===');
+      console.log('Raw response:', JSON.stringify(additionalFiltersResponse, null, 2));
+      console.log('Has additional filters:', additionalFiltersResponse?.hasAdditionalFilters);
+      console.log('Additional filters count:', additionalFiltersResponse?.additionalFilters?.length || 0);
+      console.log('==================================');
+      
+      // Process additional filters response
+      if (additionalFiltersResponse && additionalFiltersResponse.hasAdditionalFilters) {
+        additionalFiltersData = additionalFiltersResponse.additionalFilters;
+      }
+    } else {
+      // Sequential execution when only extraction is needed
+      console.log('=== NO ADDITIONAL FILTERS NEEDED ===');
+      console.log('Running extraction only');
+      console.log('===================================');
+      
+      const { object } = await generateObject({
+        model: openai('gpt-4.1'),
+        schema: ExtractionSchema,
+        system: getExtractionPrompt(dbSelection.database),
       prompt: `USERS QUERY: "${description}"`,
       temperature: 0.3
     });
+      extraction = object;
+    }
 
-  // Location validation no longer needed - all databases now have specialized handlers
+    // Location validation no longer needed - all databases now have specialized handlers
     let locationInfo = {
       hasLocation: false,
       components: { city: "", state: "", zip: "", country: "", region: "" },
       locationFilters: []
     };
 
-  // Build the base response
-  let combinedResults = {
-    needsFollowUp: false,
+    // Build the base response
+    let combinedResults = {
+      needsFollowUp: false,
       database: dbSelection.database,
       recommendedDatabase: dbSelection.database,
       actualDatabase: dbSelection.database,
-    filters: [],
-    hasAdditionalFilters: false,
-    additionalFiltersMessage: null
-  };
-
-  // Step 3: Fetch additional filters if database selection indicates they're needed
-  let additionalFiltersData = [];
-  if (dbSelection.needsAdditionalFilters) {
-    const additionalFiltersResponse = await fetchAdditionalFilters(description, dbConfig.additionalFiltersRoute);
-    
-    // Add additional filters data to the combined results if there are any
-    if (additionalFiltersResponse && additionalFiltersResponse.hasAdditionalFilters) {
-      additionalFiltersData = additionalFiltersResponse.additionalFilters;
-      combinedResults.additionalFiltersMessage = additionalFiltersResponse.message;
-      combinedResults.hasAdditionalFilters = true;
-    }
-  }
+      filters: [],
+      hasAdditionalFilters: additionalFiltersData.length > 0,
+      additionalFiltersMessage: additionalFiltersData.length > 0 ? "Additional filters applied" : null
+    };
 
   // Create pre-formatted filters using the helper function
   combinedResults.filters = createFiltersFromExtraction(
@@ -649,6 +685,14 @@ export async function POST(request) {
     dbSelection.database, 
     additionalFiltersData
   );
+
+  // Log what's being sent to frontend
+  console.log('=== TEST-CLONE RESPONSE ===');
+  console.log('Database:', combinedResults.database);
+  console.log('Filters count:', combinedResults.filters.length);
+  console.log('Filters being sent:', JSON.stringify(combinedResults.filters, null, 2));
+  console.log('Has additional filters:', combinedResults.hasAdditionalFilters);
+  console.log('========================');
 
   return NextResponse.json(combinedResults);
 }
