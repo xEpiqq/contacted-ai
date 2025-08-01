@@ -12,55 +12,73 @@ const DATABASE_MAPPINGS = {
     additionalFiltersRoute: "/api/ai/extract-usa4-additional-filters",
     locationPrompt: `
       FOR LOCATION (USA Professionals Database):
-      Available columns: Locality (96.0%), Region (96.3%), Metro (81.9%), Postal Code (21.6%)
-      - Extract city, state, country components using clean, simple terms
-      - For multiple cities: combine with "or" (e.g., "New York or Los Angeles") → maps to Locality column
-      - For multiple states: combine with "or" (e.g., "California or Texas") → maps to Region column  
+      Available columns: Location (96.0%), Locality (96.0%), Region (96.3%), Metro (81.9%), Postal Code (21.6%)
+      - Location: Full address strings (e.g., "louisville, kentucky, united states")
+      - Locality: Clean city names (e.g., "louisville", "lexington", "bowling green")  
+      - Region: State names (e.g., "kentucky", "iowa", "united states")
+      - Metro: Metro areas (e.g., "louisville, kentucky", "lexington, kentucky")
+      - Extract city, state components using clean, simple terms
+      - For multiple cities: extract as separate values → maps to Locality column (cleanest city data)
+      - For multiple states: extract as separate values → maps to Region column
       - If user specifies just "United States" without city/state, still extract as country (no filter will be applied)
-      - AVOID postal codes unless specifically requested (low coverage)
+      - AVOID postal codes unless specifically requested (low coverage at 21.6%)
       - Set hasLocation to true if any location is mentioned, false otherwise
     `
   },
   "eap1_new_v2": {
     jobTitleColumn: "person_title",
-    locationColumns: ["person_location_city", "person_location_state", "person_location_country", "person_location_postal_code"],
+    locationColumns: ["person_location_city", "person_location_state", "person_location_country", "person_location_postal_code", "person_location_city_with_state_or_country", "person_location_state_with_country"],
     industryColumn: "person_detailed_function",
     additionalFiltersRoute: "/api/ai/extract-eap1-additional-filters",
     locationPrompt: `
       FOR LOCATION (Global B2B Contacts Database):
-      Available columns: person_location_city, person_location_state, person_location_country, person_location_postal_code
+      Available columns: person_location_country (97.8%), person_location_state (92.2%), person_location_state_with_country (92.2%), person_location_city (89.0%), person_location_city_with_state_or_country (89.0%), person_location_postal_code (27.6%)
+      - person_location_country: Country names (e.g., "United States", "Australia", "Brazil") - highest coverage
+      - person_location_state: State/province names (e.g., "Pennsylvania", "Michigan", "Victoria")
+      - person_location_state_with_country: State with country context (e.g., "Pennsylvania, US", "Victoria, Australia")
+      - person_location_city: Clean city names (e.g., "Philadelphia", "New Baltimore", "Melbourne")
+      - person_location_city_with_state_or_country: City with context (e.g., "Philadelphia, Pennsylvania", "Melbourne, Australia")
       - Extract city, state, country components using clean, simple terms
-      - Focus on country-level filtering for international contacts
-      - Cities and states when specified for better targeting
+      - Focus on person_location_country for international B2B targeting (97.8% coverage)
+      - Use person_location_state for regional targeting (92.2% coverage)
+      - AVOID postal_code unless specifically requested (lower coverage at 27.6%)
       - Set hasLocation to true if any location is mentioned, false otherwise
     `
   },
   "otc1_new_v2": {
     jobTitleColumn: "job_title",
-    locationColumns: ["location", "locality", "region", "location_country"],
+    locationColumns: ["location", "locality", "region", "location_country", "location_continent", "metro", "postal_code"],
     industryColumn: "industry",
     additionalFiltersRoute: "/api/ai/extract-otc1-additional-filters",
     locationPrompt: `
       FOR LOCATION (International Professionals Database):
-      Available columns: location, locality, region, location_country
-      - Extract city, state, country components using clean, simple terms
-      - Focus on country-level filtering for international professionals
-      - Use locality for cities, location_country for countries
+      Available columns: location (92.89%), location_country (92.89%), location_continent (92.89%), locality (37.26%), region (37.26%), metro (29.54%), postal_code (2.11%)
+      - location: Mixed location data (e.g., "turkey", "aydin, turkey", "i̇zmir, turkey")
+      - location_country: Country names (e.g., "turkey") - highest coverage for international targeting
+      - location_continent: Continents (e.g., "asia", "europe", "middle east") 
+      - locality: Cities/regions (e.g., "aydin, turkey", "ankara") - lower coverage
+      - region: Regional areas (e.g., "aydin", "i̇zmir", "ankara") - lower coverage
+      - metro: Metro areas (e.g., "aydin", "i̇zmir", "ankara") - lower coverage
+      - Extract city, state, country, continent components using clean, simple terms
+      - Focus on location_country for international professionals (92.89% coverage)
+      - Use location_continent for broad regional targeting
+      - AVOID postal_code unless specifically requested (very low coverage at 2.11%)
       - Set hasLocation to true if any location is mentioned, false otherwise
     `
   },
   "deez_3_v3": {
     jobTitleColumn: null, // Local businesses don't have individual job titles
     businessTypeColumn: "search_keyword", // For business types instead of job titles
-    locationColumns: ["location", "locality", "region"],
+    locationColumns: ["search_city", "city", "region", "zip"],
     industryColumn: "category",
     additionalFiltersRoute: "/api/ai/extract-deez-additional-filters",
     locationPrompt: `
       FOR LOCATION (US Local Businesses Database):
-      Available columns: location, locality, region
-      - Extract city, state, country components using clean, simple terms
-      - Focus on city/locality for local business targeting
-      - Use region for state-level filtering
+      Available columns: search_city (99.8%), city (99.6%), region (99.6%), zip (99.2%)
+      - Extract city, state components using clean, simple terms
+      - Use search_city for primary city targeting (highest coverage)
+      - Use region for state-level filtering (e.g., "NC", "CA", "TX")
+      - Use zip codes only if specifically requested
       - Set hasLocation to true if any location is mentioned, false otherwise
     `
   }
@@ -81,6 +99,7 @@ const ExtractionSchema = z.object({
   city: z.string().optional(),
   state: z.string().optional(),
   country: z.string().optional(),
+  continent: z.string().optional(),
   hasLocation: z.boolean()
 });
 
@@ -168,23 +187,37 @@ function createEAP1LocationFilters(extraction) {
   const state = extraction.state?.toLowerCase().trim(); 
   const country = extraction.country?.toLowerCase().trim();
   
-  // For global B2B, prioritize country-level filtering
+  // For global B2B contacts, prioritize high-coverage columns
+  
+  // 1. Country (97.8% coverage) - primary targeting for international B2B
   if (country) {
-    locationFilters.push({
-      column: "person_location_country",
-      tokens: [country]
-    });
+    const countries = country.split(/\s+(?:or|and)\s+|\s*,\s*/)
+      .map(c => c.trim())
+      .filter(c => c.length > 0);
+    
+    if (countries.length > 0) {
+      locationFilters.push({
+        column: "person_location_country",
+        tokens: countries
+      });
+    }
   }
   
-  // Add state if specified
+  // 2. State (92.2% coverage) - regional targeting within countries
   if (state) {
-    locationFilters.push({
-      column: "person_location_state",
-      tokens: [state]
-    });
+    const states = state.split(/\s+(?:or|and)\s+|\s*,\s*/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+    
+    if (states.length > 0) {
+      locationFilters.push({
+        column: "person_location_state",
+        tokens: states
+      });
+    }
   }
   
-  // Add city if specified
+  // 3. City (89.0% coverage) - specific city targeting
   if (city) {
     const cities = city.split(/\s+(?:or|and)\s+|\s*,\s*/)
       .map(c => c.trim())
@@ -212,16 +245,39 @@ function createOTC1LocationFilters(extraction) {
   const city = extraction.city?.toLowerCase().trim();
   const state = extraction.state?.toLowerCase().trim(); 
   const country = extraction.country?.toLowerCase().trim();
+  const continent = extraction.continent?.toLowerCase().trim();
   
-  // For international professionals, prioritize country
-  if (country) {
-    locationFilters.push({
-      column: "location_country",
-      tokens: [country]
-    });
+  // For international professionals, prioritize high-coverage columns
+  
+  // 1. Continent (92.89% coverage) - broadest geographical targeting
+  if (continent) {
+    const continents = continent.split(/\s+(?:or|and)\s+|\s*,\s*/)
+      .map(c => c.trim())
+      .filter(c => c.length > 0);
+    
+    if (continents.length > 0) {
+      locationFilters.push({
+        column: "location_continent",
+        tokens: continents
+      });
+    }
   }
   
-  // Add locality (city) if specified
+  // 2. Country (92.89% coverage) - primary targeting for internationals  
+  if (country) {
+    const countries = country.split(/\s+(?:or|and)\s+|\s*,\s*/)
+      .map(c => c.trim())
+      .filter(c => c.length > 0);
+    
+    if (countries.length > 0) {
+      locationFilters.push({
+        column: "location_country",
+        tokens: countries
+      });
+    }
+  }
+  
+  // 3. Locality (37.26% coverage) - lower coverage but specific city targeting
   if (city) {
     const cities = city.split(/\s+(?:or|and)\s+|\s*,\s*/)
       .map(c => c.trim())
@@ -235,7 +291,7 @@ function createOTC1LocationFilters(extraction) {
     }
   }
   
-  // Add region (state) if specified
+  // 4. Region (37.26% coverage) - lower coverage regional targeting
   if (state) {
     const states = state.split(/\s+(?:or|and)\s+|\s*,\s*/)
       .map(s => s.trim())
@@ -264,7 +320,7 @@ function createDEEZLocationFilters(extraction) {
   const state = extraction.state?.toLowerCase().trim(); 
   const country = extraction.country?.toLowerCase().trim();
   
-  // For local businesses, focus on city/locality first
+  // For local businesses, focus on search_city first (highest coverage at 99.8%)
   if (city) {
     const cities = city.split(/\s+(?:or|and)\s+|\s*,\s*/)
       .map(c => c.trim())
@@ -272,7 +328,7 @@ function createDEEZLocationFilters(extraction) {
     
     if (cities.length > 0) {
       locationFilters.push({
-        column: "locality",
+        column: "search_city",
         tokens: cities
       });
     }
@@ -482,7 +538,7 @@ function getExtractionPrompt(database) {
 
   return basePrompt + locationPrompt + `
 
-    Return jobTitles array, industryKeywords array, city, state, country, and hasLocation boolean.
+    Return jobTitles array, industryKeywords array, city, state, country, continent, and hasLocation boolean.
   `;
 }
 
@@ -502,8 +558,10 @@ export async function POST(request) {
         Select the best database below based on the USER'S QUERY.
         Note: think through these questions.
         - Does the user want people or local businesses? (choose deez_3_v3 if local businesses)
-        - Does the user want people inside the united states? (choose usa4_new_v2, or eap1_new_v2 with country "united states")
-        - Does the user want people outside the united states? (choose otc1_new_v2 if so)
+        - Does the user want people inside the united states? (usually choose usa4_new_v2 if so)
+        - Does the user want people outside the united states? (usualy choose otc1_new_v2 if so)
+        - Does the user want people inside AND outside the united states? (choose eap1_new_v2 if so)
+        
         If no location is specified, assume the user wants people inside the united states.
         
         Here are all the columns in all of our databases, plus 1 example for each of what data might be in them:
