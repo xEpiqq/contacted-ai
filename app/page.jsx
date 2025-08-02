@@ -487,20 +487,20 @@ export default function Search() {
         )}
       </div>
 
-      {/* Column Selection Modal - Only show when ManualSearch is active */}
-      {(apiResults || manualMode) && showColumnSelector && manualSearchRef.current && (
-        <div className="z-[100]">
-          {/* Semi-transparent overlay */}
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100]" />
+             {/* Column Selection Modal - Only show when ManualSearch is active */}
+       {(apiResults || manualMode) && showColumnSelector && manualSearchRef.current && (
+         <div className="z-[100]">
+           {/* Semi-transparent overlay */}
+           <div className="fixed inset-0 bg-black/60 z-[100]" />
           
-          <div 
-            className="fixed inset-0 flex items-center justify-center z-[101] p-4"
-            onClick={() => setShowColumnSelector(false)}
-          >
-            <div 
-              className="bg-[#2a2a2a] border border-[#505050] rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl backdrop-blur-sm"
-              onClick={(e) => e.stopPropagation()}
-            >
+                     <div 
+             className="fixed inset-0 flex items-center justify-center z-[101] p-4"
+             onClick={() => setShowColumnSelector(false)}
+           >
+             <div 
+               className="bg-[#2a2a2a] border border-[#505050] rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl"
+               onClick={(e) => e.stopPropagation()}
+             >
               <div className="p-6">
                 <h3 className="font-medium text-lg text-white mb-2">Column Selection</h3>
                 <p className="text-sm text-gray-400 mb-6">
@@ -577,20 +577,20 @@ export default function Search() {
         </div>
       )}
 
-      {/* Export Data Modal - Only show when ManualSearch is active */}
-      {(apiResults || manualMode) && showExportSection && manualSearchRef.current && (
-        <div className="z-[100]">
-          {/* Semi-transparent overlay */}
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100]" />
+             {/* Export Data Modal - Only show when ManualSearch is active */}
+       {(apiResults || manualMode) && showExportSection && manualSearchRef.current && (
+         <div className="z-[100]">
+           {/* Semi-transparent overlay */}
+           <div className="fixed inset-0 bg-black/60 z-[100]" />
           
-          <div 
-            className="fixed inset-0 flex items-center justify-center z-[101] p-4"
-            onClick={() => setShowExportSection(false)}
-          >
-            <div 
-              className="bg-[#2a2a2a] border border-[#505050] rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl backdrop-blur-sm"
-              onClick={(e) => e.stopPropagation()}
-            >
+                     <div 
+             className="fixed inset-0 flex items-center justify-center z-[101] p-4"
+             onClick={() => setShowExportSection(false)}
+           >
+             <div 
+               className="bg-[#2a2a2a] border border-[#505050] rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl"
+               onClick={(e) => e.stopPropagation()}
+             >
               <div className="p-6">
                 <h3 className="font-medium text-lg text-white mb-2">Export Data</h3>
                   

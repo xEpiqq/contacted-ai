@@ -706,7 +706,7 @@ const EnrichmentDrawer = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]"
+            className="fixed inset-0 bg-black/60 z-[100]"
             onClick={handleDrawerClose}
           />
           
