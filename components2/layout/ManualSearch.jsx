@@ -1,9 +1,9 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import { Combobox } from "@headlessui/react";
 import { ChevronUpDownIcon, ChevronDownIcon, ArrowLeftIcon } from "@heroicons/react/24/solid";
 import { createClient } from "@/utils/supabase/client";
-import FiltersDrawer from "./FiltersDrawer";
+
 
 // Database table configurations
 const DB_TABLES = [
@@ -206,13 +206,29 @@ function TokensInput({
   );
 }
 
-export default function ManualSearch({ 
+const ManualSearch = forwardRef(function ManualSearch({ 
   aiResults = null, 
   recommendedDatabase = null,
   className = "",
   onResultsCountChange = null,
-  onBack = null // optional callback to return to search input view
-}) {
+  onBack = null, // optional callback to return to search input view
+  showColumnSelector = false,
+  setShowColumnSelector = null,
+  showExportSection = false,
+  setShowExportSection = null,
+  columnSearch = "",
+  setColumnSearch = null,
+  exporting = false,
+  setExporting = null,
+  exportProgress = 0,
+  setExportProgress = null,
+  rowsToExport = "",
+  setRowsToExport = null,
+  exportError = "",
+  setExportError = null,
+  exportDone = false,
+  setExportDone = null
+}, ref) {
   // Table selection state
   const [selectedTable, setSelectedTable] = useState(() => {
     // If we have a recommended database, find it in our tables
@@ -244,23 +260,9 @@ export default function ManualSearch({
   // User Settings Load State (important fix)
   const [userSettingsLoaded, setUserSettingsLoaded] = useState(false);
 
-  // Column & Filter Section visibility
-  const [showColumnSelector, setShowColumnSelector] = useState(false);
+  // Filters Drawer is now handled in layout.jsx
 
-  // Filters Drawer state
-  const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
-  const [filterDrawerData, setFilterDrawerData] = useState(null);
-
-  // Searching columns in Column Modal
-  const [columnSearch, setColumnSearch] = useState("");
-
-  // SSE Export
-  const [showExportSection, setShowExportSection] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [exportProgress, setExportProgress] = useState(0);
-  const [rowsToExport, setRowsToExport] = useState("");
-  const [exportError, setExportError] = useState("");
-  const [exportDone, setExportDone] = useState(false);
+  // Export/column modal state is now passed as props
 
   // Loading states
   const [rowsLoading, setRowsLoading] = useState(false);
@@ -279,6 +281,75 @@ export default function ManualSearch({
 
   // Handle click outside dropdown
   const tableDropdownRef = useRef(null);
+
+  // Expose data and functions to parent via ref
+  useImperativeHandle(ref, () => ({
+    availableColumns,
+    visibleColumns,
+    setVisibleColumns,
+    selectedTable,
+    filters,
+    matchingCount,
+    filteredAvailableColumns: columnSearch
+      ? availableColumns.filter((col) =>
+          col.toLowerCase().includes(columnSearch.toLowerCase())
+        )
+      : availableColumns,
+    toggleColumn: (col) => {
+      setVisibleColumns((prev) =>
+        prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]
+      );
+    },
+    closeColumnSelectorModal: async () => {
+      if (setShowColumnSelector) setShowColumnSelector(false);
+      await saveUserSettings(visibleColumns, filters);
+    },
+    startExport: async () => {
+      if (!rowsToExport || rowsToExport < 1) return;
+      if (setExportError) setExportError("");
+      if (setExporting) setExporting(true);
+      if (setExportProgress) setExportProgress(0);
+      if (setExportDone) setExportDone(false);
+
+      const params = new URLSearchParams({
+        table_name: selectedTable.id,
+        filters: JSON.stringify(filters),
+        limit: rowsToExport.toString(),
+      });
+      params.append("columns", visibleColumns.join(","));
+
+      const es = new EventSource(`/api/people/export?${params}`);
+
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data || "{}");
+          if (typeof data.progress === "number" && setExportProgress) {
+            setExportProgress(data.progress);
+          }
+          if (data.error) {
+            es.close();
+            if (setExporting) setExporting(false);
+            if (setExportError) setExportError(data.error);
+          }
+          if (data.status === "done") {
+            es.close();
+            if (setExporting) setExporting(false);
+            if (setExportProgress) setExportProgress(100);
+            if (setExportDone) setExportDone(true);
+          }
+        } catch (err) {
+          es.close();
+          if (setExporting) setExporting(false);
+          if (setExportError) setExportError("Export failed");
+        }
+      };
+      es.onerror = () => {
+        es.close();
+        if (setExporting) setExporting(false);
+        if (setExportError) setExportError("Export failed");
+      };
+    }
+  }), [availableColumns, visibleColumns, selectedTable, filters, matchingCount, columnSearch, rowsToExport]);
   
   // Notify parent of results count changes
   useEffect(() => {
@@ -298,34 +369,39 @@ export default function ManualSearch({
         subop: ""
     }];
     
-    // Set the drawer data
-    setFilterDrawerData({
-      availableColumns,
-      pendingFilters: JSON.parse(JSON.stringify(initialFilters)),
-      selectedTable,
-      onApplyFilters: handleApplyFilters,
-      onClose: handleCloseFiltersDrawer
-    });
+    // Dispatch event to open filters drawer in layout
+    window.dispatchEvent(new CustomEvent('openFiltersDrawer', {
+      detail: {
+        availableColumns,
+        pendingFilters: JSON.parse(JSON.stringify(initialFilters)),
+        selectedTable,
+        onApplyFilters: handleApplyFilters,
+        onClose: () => window.dispatchEvent(new CustomEvent('closeFiltersDrawer'))
+      }
+    }));
     
-    setFiltersDrawerOpen(true);
     // Close other modals
-    setShowColumnSelector(false);
-    setShowExportSection(false);
+    if (setShowColumnSelector) setShowColumnSelector(false);
+    if (setShowExportSection) setShowExportSection(false);
   }
   
   // Toggle column selector modal
   function toggleColumnSelector() {
-    setColumnSearch("");
-    setShowColumnSelector(!showColumnSelector);
-    // Close other modals
-    setShowExportSection(false);
+    if (setShowColumnSelector) {
+      if (setColumnSearch) setColumnSearch("");
+      setShowColumnSelector(!showColumnSelector);
+      // Close other modals
+      if (setShowExportSection) setShowExportSection(false);
+    }
   }
   
   // Toggle export modal
   function toggleExportSection() {
-    setShowExportSection(!showExportSection);
-    // Close other modals
-    setShowColumnSelector(false);
+    if (setShowExportSection) {
+      setShowExportSection(!showExportSection);
+      // Close other modals
+      if (setShowColumnSelector) setShowColumnSelector(false);
+    }
   }
 
   // Handle click outside table dropdown
@@ -654,11 +730,7 @@ export default function ManualSearch({
   // ------------------------
   //    Filter Logic
   // ------------------------
-  // Filter functions are now in FiltersDrawer component
-  function handleCloseFiltersDrawer() {
-    setFiltersDrawerOpen(false);
-    setFilterDrawerData(null);
-  }
+  // Filter functions are now in FiltersDrawer component in layout.jsx
 
   async function handleApplyFilters(updated) {
     setFilters(updated);
@@ -668,95 +740,21 @@ export default function ManualSearch({
   // ------------------------
   //   Column Selection
   // ------------------------
-  function openColumnSelectorModal() {
-    setColumnSearch("");
-    setShowColumnSelector(true);
-  }
-  
-  async function closeColumnSelectorModal() {
-    setShowColumnSelector(false);
-    await saveUserSettings(visibleColumns, filters);
-  }
-  
-  function toggleColumn(col) {
-    setVisibleColumns((prev) =>
-      prev.includes(col) ? prev.filter((c) => c !== col) : [...prev, col]
-    );
-  }
-  
-  const filteredAvailableColumns = columnSearch
-    ? availableColumns.filter((col) =>
-        col.toLowerCase().includes(columnSearch.toLowerCase())
-      )
-    : availableColumns;
+  // Column functions moved to useImperativeHandle
 
   // ------------------------
   //     SSE Export
   // ------------------------
-  function openExportModal() {
-    setRowsToExport(matchingCount || 0);
-    setExportProgress(0);
-    setExportError("");
-    setExportDone(false);
-    setShowExportSection(true);
-  }
-  
-  function closeExportModal() {
-    setShowExportSection(false);
-  }
-
-  async function startExport() {
-    if (!rowsToExport || rowsToExport < 1) return;
-    setExportError("");
-    setExporting(true);
-    setExportProgress(0);
-    setExportDone(false);
-
-    const params = new URLSearchParams({
-      table_name: selectedTable.id,
-      filters: JSON.stringify(filters),
-      limit: rowsToExport.toString(),
-    });
-    // pass columns
-    params.append("columns", visibleColumns.join(","));
-
-    const es = new EventSource(`/api/people/export?${params}`);
-
-    es.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data || "{}");
-        if (typeof data.progress === "number") {
-          setExportProgress(data.progress);
-        }
-        if (data.error) {
-          es.close();
-          setExporting(false);
-          setExportError(data.error);
-        }
-        if (data.status === "done") {
-          es.close();
-          setExporting(false);
-          setExportProgress(100);
-          setExportDone(true);
-        }
-      } catch (err) {
-        es.close();
-        setExporting(false);
-        setExportError("Export failed");
-      }
-    };
-    es.onerror = () => {
-      es.close();
-      setExporting(false);
-      setExportError("Export failed");
-    };
-  }
+  // Export functions moved to useImperativeHandle
 
   // ------------------------
   //    Render
   // ------------------------
-  return (
+    return (
     <div className={`bg-[#212121] text-white ${className}`}>
+
+
+    
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Top Control Bar */}
         <div className="flex justify-between items-center mb-6 mx-auto px-4 max-w-[calc(100vw-3rem)]">
@@ -1064,208 +1062,10 @@ export default function ManualSearch({
       </div>
       </div>
             
-      {/* Column Selection Modal */}
-      {showColumnSelector && (
-        <>
-          {/* Semi-transparent overlay */}
-          <div className="fixed inset-0 bg-black/60 z-40" />
-          
-          <div 
-            className="fixed inset-0 flex items-center justify-center z-50 p-4"
-            onClick={() => setShowColumnSelector(false)}
-          >
-            <div 
-              className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-6">
-                <h3 className="font-medium text-lg text-white mb-2">Column Selection</h3>
-                <p className="text-sm text-gray-400 mb-6">
-                  Select which columns to display in your results table.
-                </p>
-                  
-                <div className="mb-6">
-                  <input
-                    type="text"
-                    placeholder="Search columns..."
-                    value={columnSearch}
-                    onChange={(e) => setColumnSearch(e.target.value)}
-                    className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
-                  />
-                </div>
-                  
-                <div className="max-h-60 overflow-y-auto space-y-1 mb-6">
-                  {/* Select All Option */}
-                  <label className="flex items-center gap-3 cursor-pointer py-3 px-4 hover:bg-[#333333] rounded-lg transition-all duration-200 border-b border-[#404040] mb-2">
-                                          <input
-                        type="checkbox"
-                        checked={visibleColumns.length === filteredAvailableColumns.length}
-                        onChange={() => {
-                          if (visibleColumns.length === filteredAvailableColumns.length) {
-                            // Deselect all
-                            setVisibleColumns([]);
-                          } else {
-                            // Select all - prioritize default columns first
-                            const defaultCols = selectedTable.defaultColumns.filter(col => 
-                              filteredAvailableColumns.includes(col)
-                            );
-                            const otherCols = filteredAvailableColumns.filter(col => 
-                              !selectedTable.defaultColumns.includes(col)
-                            );
-                            setVisibleColumns([...defaultCols, ...otherCols]);
-                          }
-                        }}
-                        className="h-4 w-4 accent-blue-500 rounded"
-                      />
-                    <span className="text-sm text-gray-300 font-medium">Select all</span>
-                  </label>
-                  
-                  {filteredAvailableColumns.map((col) => (
-                    <label key={col} className="flex items-center gap-3 cursor-pointer py-3 px-4 hover:bg-[#333333] rounded-lg transition-all duration-200">
-                      <input
-                        type="checkbox"
-                        checked={visibleColumns.includes(col)}
-                        onChange={() => toggleColumn(col)}
-                        className="h-4 w-4 accent-blue-500 rounded"
-                      />
-                      <span className="text-sm text-gray-300">{col}</span>
-                    </label>
-                  ))}
-                </div>
-                  
-                <div className="flex gap-3">
-                  <button 
-                    onClick={() => setShowColumnSelector(false)}
-                    className="flex-1 px-4 py-3 bg-[#404040] hover:bg-[#4a4a4a] text-white font-medium text-sm rounded-lg transition-all duration-200"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    onClick={closeColumnSelectorModal}
-                    className="flex-1 px-4 py-3 bg-[#505050] hover:bg-[#5a5a5a] text-white font-medium text-sm rounded-lg transition-all duration-200"
-                  >
-                    Apply Changes
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
               
-      {/* Export Data Modal */}
-      {showExportSection && (
-        <>
-          {/* Semi-transparent overlay */}
-          <div className="fixed inset-0 bg-black/60 z-40" />
-          
-          <div 
-            className="fixed inset-0 flex items-center justify-center z-50 p-4"
-            onClick={() => setShowExportSection(false)}
-          >
-            <div 
-              className="bg-[#2a2a2a] border border-[#3a3a3a] rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="p-6">
-                <h3 className="font-medium text-lg text-white mb-2">Export Data</h3>
-                  
-                {exporting ? (
-                  <div className="text-center py-4">
-                    <div className="w-full bg-[#404040] h-2 rounded-full mb-4 overflow-hidden">
-                      <div
-                        className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                        style={{ width: `${exportProgress}%` }}
-                      />
-                    </div>
-                    <div className="text-sm text-gray-400">
-                      {exportProgress}% Complete
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-sm text-gray-400 mb-6 leading-relaxed">
-                      Choose how many rows to export. You'll be charged 1 token per
-                      row, but only if the export completes successfully.
-                    </p>
-                      
-                    <div className="mb-6">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="text-sm text-gray-300">Amount</div>
-                        <div className="text-xs text-gray-500">Max: 200K</div>
-                      </div>
-                      <input
-                        type="number"
-                        value={rowsToExport === null ? "" : rowsToExport}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setRowsToExport(val === "" ? null : Number(val));
-                        }}
-                        min="1"
-                        max="200000"
-                        placeholder="0.00"
-                        className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
-                      />
-                    </div>
-                      
-                    {exportError && (
-                      <div className="mb-6 text-sm text-red-400 bg-red-500/10 rounded-lg px-4 py-3">
-                        {exportError}
-                      </div>
-                    )}
-                      
-                                        {!exportDone ? (
-                      <div className="flex gap-3">
-                        <button 
-                          onClick={() => setShowExportSection(false)}
-                          className="flex-1 px-4 py-3 bg-[#404040] hover:bg-[#4a4a4a] text-white font-medium text-sm rounded-lg transition-all duration-200"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={startExport}
-                          className="flex-1 px-4 py-3 bg-[#505050] hover:bg-[#5a5a5a] text-white font-medium text-sm rounded-lg transition-all duration-200"
-                        >
-                          Export
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setShowExportSection(false);
-                          // Exports drawer functionality removed - just close the section
-                        }}
-                        className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white font-medium text-sm rounded-lg transition-all duration-200"
-                      >
-                        View exports
-                      </button>
-                    )}
-                    </>
-                  )}
-                  
-                  {exportDone && (
-                  <div className="mt-6 text-sm text-green-400 bg-green-500/10 rounded-lg px-4 py-3 text-center">
-                      Export completed successfully!
-                </div>
-              )}
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Filters Drawer */}
-      {filtersDrawerOpen && filterDrawerData && (
-        <FiltersDrawer
-          availableColumns={filterDrawerData.availableColumns}
-          pendingFilters={filterDrawerData.pendingFilters}
-          selectedTable={filterDrawerData.selectedTable}
-          onApplyFilters={filterDrawerData.onApplyFilters}
-          onClose={filterDrawerData.onClose}
-        />
-      )}
-
-      {/* FiltersDrawer is now rendered at the SearchProvider level */}
+      {/* FiltersDrawer is now rendered at the layout.jsx level for proper z-index */}
     </div>
   );
-}
+});
+
+export default ManualSearch;

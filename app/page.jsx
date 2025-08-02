@@ -30,12 +30,56 @@ export default function Search() {
   const [exampleQueries] = useState(["software engineers in fintech", "marketing directors", "healthcare professionals in Boston", "data scientists with AI experience"]);
   const textareaRef = useRef(null);
   const plusButtonRef = useRef(null);
+  const manualSearchRef = useRef(null);
   // Flag to ensure default search only runs once
   const hasAutoSearchRun = useRef(false);
   const [showPlusOptions, setShowPlusOptions] = useState(false);
   const [creditsScreenOpen, setCreditsScreenOpen] = useState(false);
+  
+  // Modal states for ManualSearch
+  const [showColumnSelector, setShowColumnSelector] = useState(false);
+  const [showExportSection, setShowExportSection] = useState(false);
+  
+  // Column modal state
+  const [columnSearch, setColumnSearch] = useState("");
+  
+  // Export modal state
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+  const [rowsToExport, setRowsToExport] = useState("");
+  const [exportError, setExportError] = useState("");
+  const [exportDone, setExportDone] = useState(false);
 
   const canProceed = text.trim().length > 0;
+
+  // Initialize modals when they open
+  useEffect(() => {
+    if (showColumnSelector) {
+      setColumnSearch("");
+    }
+  }, [showColumnSelector]);
+
+  useEffect(() => {
+    if (showExportSection && manualSearchRef.current) {
+      setRowsToExport(manualSearchRef.current.matchingCount || 0);
+      setExportProgress(0);
+      setExportError("");
+      setExportDone(false);
+    }
+  }, [showExportSection]);
+
+  // Auto-open ExportsDrawer when export completes
+  useEffect(() => {
+    if (exportDone) {
+      // Small delay to show success message, then open drawer
+      setTimeout(() => {
+        // Close the export modal
+        setShowExportSection(false);
+        // Open the exports drawer to show the new export
+        window.dispatchEvent(new CustomEvent('openExportsDrawer'));
+      }, 800); // Brief delay to show success message
+    }
+  }, [exportDone]);
 
   // Notify layout about guide visibility based on page state
   useEffect(() => {
@@ -184,18 +228,52 @@ export default function Search() {
       <div className={`min-h-screen bg-[#212121] text-white flex items-center justify-center p-4 ${!isAuthPage && !creditsScreenOpen ? 'pt-20' : ''}`}>
         {apiResults ? (
           <div className={`fixed ${isAuthPage || creditsScreenOpen ? 'top-0' : 'top-16'} left-0 right-0 bottom-0 p-4 overflow-auto bg-[#212121]`}>
-                <ManualSearch 
-                  aiResults={apiResults}
-                  recommendedDatabase={recommendedDatabase || actualDatabase}
+                            <ManualSearch 
+              ref={manualSearchRef}
+              aiResults={apiResults}
+              recommendedDatabase={recommendedDatabase || actualDatabase}
               onBack={() => setApiResults(null)}
+              showColumnSelector={showColumnSelector}
+              setShowColumnSelector={setShowColumnSelector}
+              showExportSection={showExportSection}
+              setShowExportSection={setShowExportSection}
+              columnSearch={columnSearch}
+              setColumnSearch={setColumnSearch}
+              exporting={exporting}
+              setExporting={setExporting}
+              exportProgress={exportProgress}
+              setExportProgress={setExportProgress}
+              rowsToExport={rowsToExport}
+              setRowsToExport={setRowsToExport}
+              exportError={exportError}
+              setExportError={setExportError}
+              exportDone={exportDone}
+              setExportDone={setExportDone}
             />
           </div>
         ) : manualMode ? (
           <div className={`fixed ${isAuthPage || creditsScreenOpen ? 'top-0' : 'top-16'} left-0 right-0 bottom-0 p-4 overflow-auto bg-[#212121]`}>
             <ManualSearch 
+              ref={manualSearchRef}
               aiResults={null}
               recommendedDatabase={null}
               onBack={() => setManualMode(false)}
+              showColumnSelector={showColumnSelector}
+              setShowColumnSelector={setShowColumnSelector}
+              showExportSection={showExportSection}
+              setShowExportSection={setShowExportSection}
+              columnSearch={columnSearch}
+              setColumnSearch={setColumnSearch}
+              exporting={exporting}
+              setExporting={setExporting}
+              exportProgress={exportProgress}
+              setExportProgress={setExportProgress}
+              rowsToExport={rowsToExport}
+              setRowsToExport={setRowsToExport}
+              exportError={exportError}
+              setExportError={setExportError}
+              exportDone={exportDone}
+              setExportDone={setExportDone}
             />
           </div>
         ) : (
@@ -408,6 +486,187 @@ export default function Search() {
           </motion.div>
         )}
       </div>
+
+      {/* Column Selection Modal - Only show when ManualSearch is active */}
+      {(apiResults || manualMode) && showColumnSelector && manualSearchRef.current && (
+        <div className="z-[100]">
+          {/* Semi-transparent overlay */}
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100]" />
+          
+          <div 
+            className="fixed inset-0 flex items-center justify-center z-[101] p-4"
+            onClick={() => setShowColumnSelector(false)}
+          >
+            <div 
+              className="bg-[#2a2a2a] border border-[#505050] rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl backdrop-blur-sm"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <h3 className="font-medium text-lg text-white mb-2">Column Selection</h3>
+                <p className="text-sm text-gray-400 mb-6">
+                  Select which columns to display in your results table.
+                </p>
+                  
+                <div className="mb-6">
+                  <input
+                    type="text"
+                    placeholder="Search columns..."
+                    value={columnSearch}
+                    onChange={(e) => setColumnSearch(e.target.value)}
+                    className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
+                  />
+                </div>
+                  
+                <div className="max-h-60 overflow-y-auto space-y-1 mb-6">
+                  {/* Select All Option */}
+                  <label className="flex items-center gap-3 cursor-pointer py-3 px-4 hover:bg-[#333333] rounded-lg transition-all duration-200 border-b border-[#404040] mb-2">
+                    <input
+                      type="checkbox"
+                      checked={manualSearchRef.current.visibleColumns.length === manualSearchRef.current.filteredAvailableColumns.length}
+                      onChange={() => {
+                        const { visibleColumns, filteredAvailableColumns, selectedTable } = manualSearchRef.current;
+                        if (visibleColumns.length === filteredAvailableColumns.length) {
+                          // Deselect all
+                          manualSearchRef.current.setVisibleColumns([]);
+                        } else {
+                          // Select all - prioritize default columns first
+                          const defaultCols = selectedTable.defaultColumns.filter(col => 
+                            filteredAvailableColumns.includes(col)
+                          );
+                          const otherCols = filteredAvailableColumns.filter(col => 
+                            !selectedTable.defaultColumns.includes(col)
+                          );
+                          manualSearchRef.current.setVisibleColumns([...defaultCols, ...otherCols]);
+                        }
+                      }}
+                      className="h-4 w-4 accent-blue-500 rounded"
+                    />
+                    <span className="text-sm text-gray-300 font-medium">Select all</span>
+                  </label>
+                  
+                  {manualSearchRef.current.filteredAvailableColumns.map((col) => (
+                    <label key={col} className="flex items-center gap-3 cursor-pointer py-3 px-4 hover:bg-[#333333] rounded-lg transition-all duration-200">
+                      <input
+                        type="checkbox"
+                        checked={manualSearchRef.current.visibleColumns.includes(col)}
+                        onChange={() => manualSearchRef.current.toggleColumn(col)}
+                        className="h-4 w-4 accent-blue-500 rounded"
+                      />
+                      <span className="text-sm text-gray-300">{col}</span>
+                    </label>
+                  ))}
+                </div>
+                  
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setShowColumnSelector(false)}
+                    className="flex-1 px-4 py-3 bg-[#404040] hover:bg-[#4a4a4a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => manualSearchRef.current.closeColumnSelectorModal()}
+                    className="flex-1 px-4 py-3 bg-[#505050] hover:bg-[#5a5a5a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                  >
+                    Apply Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Data Modal - Only show when ManualSearch is active */}
+      {(apiResults || manualMode) && showExportSection && manualSearchRef.current && (
+        <div className="z-[100]">
+          {/* Semi-transparent overlay */}
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100]" />
+          
+          <div 
+            className="fixed inset-0 flex items-center justify-center z-[101] p-4"
+            onClick={() => setShowExportSection(false)}
+          >
+            <div 
+              className="bg-[#2a2a2a] border border-[#505050] rounded-2xl w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl backdrop-blur-sm"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <h3 className="font-medium text-lg text-white mb-2">Export Data</h3>
+                  
+                {exporting ? (
+                  <div className="text-center py-4">
+                    <div className="w-full bg-[#404040] h-2 rounded-full mb-4 overflow-hidden">
+                      <div
+                        className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                        style={{ width: `${exportProgress}%` }}
+                      />
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      {exportProgress}% Complete
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-400 mb-6 leading-relaxed">
+                      Choose how many rows to export. You'll be charged 1 token per
+                      row, but only if the export completes successfully.
+                    </p>
+                      
+                    <div className="mb-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-sm text-gray-300">Amount</div>
+                        <div className="text-xs text-gray-500">Max: 200K</div>
+                      </div>
+                      <input
+                        type="number"
+                        value={rowsToExport === null ? "" : rowsToExport}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setRowsToExport(val === "" ? null : Number(val));
+                        }}
+                        min="1"
+                        max="200000"
+                        placeholder="0.00"
+                        className="w-full bg-[#1a1a1a] border border-[#404040] rounded-lg px-4 py-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-[#505050] transition-all duration-200"
+                      />
+                    </div>
+                      
+                    {exportError && (
+                      <div className="mb-6 text-sm text-red-400 bg-red-500/10 rounded-lg px-4 py-3">
+                        {exportError}
+                      </div>
+                    )}
+                      
+                    {!exportDone ? (
+                      <div className="flex gap-3">
+                        <button 
+                          onClick={() => setShowExportSection(false)}
+                          className="flex-1 px-4 py-3 bg-[#404040] hover:bg-[#4a4a4a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => manualSearchRef.current.startExport()}
+                          className="flex-1 px-4 py-3 bg-[#505050] hover:bg-[#5a5a5a] text-white font-medium text-sm rounded-lg transition-all duration-200"
+                        >
+                          Export
+                        </button>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+                  
+                {exportDone && (
+                  <div className="mt-6 text-sm text-green-400 bg-green-500/10 rounded-lg px-4 py-3 text-center">
+                    ✅ Export completed! Opening exports...
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 } 

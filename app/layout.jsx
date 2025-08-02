@@ -5,6 +5,7 @@ import './globals.css';
 import CreditsScreen from '@/components2/layout/CreditsScreen';
 import EnrichmentDrawer from '@/components2/layout/EnrichmentDrawer';
 import ExportsDrawer from '@/components2/layout/ExportsDrawer';
+import FiltersDrawer from '@/components2/layout/FiltersDrawer';
 import Toasts from '@/components/toasts';
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from 'react';
@@ -23,6 +24,8 @@ export default function RootLayout({ children }) {
   // Global drawer states
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [exportsDrawerOpen, setExportsDrawerOpen] = useState(false);
+  const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
+  const [filterDrawerData, setFilterDrawerData] = useState(null);
   const [toastConfig, setToastConfig] = useState(null);
   const [creditsRemaining, setCreditsRemaining] = useState(1000);
 
@@ -98,7 +101,21 @@ export default function RootLayout({ children }) {
       window.dispatchEvent(new CustomEvent('creditsScreenStateChanged', { detail: true }));
     };
     const handleOpenEnrichmentDrawer = () => setDrawerOpen(true);
-    const handleOpenExportsDrawer = () => setExportsDrawerOpen(true);
+    const handleOpenExportsDrawer = () => {
+      setExportsDrawerOpen(true);
+      // Force refresh exports when drawer opens (especially after completing an export)
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('refreshExports'));
+      }, 100);
+    };
+    const handleOpenFiltersDrawer = (event) => {
+      setFilterDrawerData(event.detail);
+      setFiltersDrawerOpen(true);
+    };
+    const handleCloseFiltersDrawer = () => {
+      setFiltersDrawerOpen(false);
+      setFilterDrawerData(null);
+    };
     const handleShowToast = (event) => setToastConfig(event.detail);
     const handleUpdateCredits = (event) => setCreditsRemaining(event.detail);
     const handleShowGuide = () => setShowGuide(true);
@@ -107,6 +124,8 @@ export default function RootLayout({ children }) {
     window.addEventListener('openCreditsScreen', handleOpenCreditsScreen);
     window.addEventListener('openEnrichmentDrawer', handleOpenEnrichmentDrawer);
     window.addEventListener('openExportsDrawer', handleOpenExportsDrawer);
+    window.addEventListener('openFiltersDrawer', handleOpenFiltersDrawer);
+    window.addEventListener('closeFiltersDrawer', handleCloseFiltersDrawer);
     window.addEventListener('showToast', handleShowToast);
     window.addEventListener('updateCredits', handleUpdateCredits);
     window.addEventListener('showGuide', handleShowGuide);
@@ -116,6 +135,8 @@ export default function RootLayout({ children }) {
       window.removeEventListener('openCreditsScreen', handleOpenCreditsScreen);
       window.removeEventListener('openEnrichmentDrawer', handleOpenEnrichmentDrawer);
       window.removeEventListener('openExportsDrawer', handleOpenExportsDrawer);
+      window.removeEventListener('openFiltersDrawer', handleOpenFiltersDrawer);
+      window.removeEventListener('closeFiltersDrawer', handleCloseFiltersDrawer);
       window.removeEventListener('showToast', handleShowToast);
       window.removeEventListener('updateCredits', handleUpdateCredits);
       window.removeEventListener('showGuide', handleShowGuide);
@@ -155,7 +176,7 @@ export default function RootLayout({ children }) {
         </div>
 
         {/* Enrichment Drawer - Global overlay */}
-        <div className="z-40">
+        <div className="z-[100]">
           <EnrichmentDrawer 
             drawerOpen={drawerOpen}
             setDrawerOpen={setDrawerOpen}
@@ -166,12 +187,25 @@ export default function RootLayout({ children }) {
         </div>
 
         {/* Exports Drawer - Global overlay */}
-        <div className="z-40">
+        <div className="z-[100]">
           <ExportsDrawer 
             exportsDrawerOpen={exportsDrawerOpen}
             setExportsDrawerOpen={setExportsDrawerOpen}
             user={user}
           />
+        </div>
+
+        {/* Filters Drawer - Global overlay */}
+        <div className="z-[100]">
+          {filtersDrawerOpen && filterDrawerData && (
+            <FiltersDrawer
+              availableColumns={filterDrawerData.availableColumns}
+              pendingFilters={filterDrawerData.pendingFilters}
+              selectedTable={filterDrawerData.selectedTable}
+              onApplyFilters={filterDrawerData.onApplyFilters}
+              onClose={filterDrawerData.onClose}
+            />
+          )}
         </div>
 
         {/* Toast Notifications - Global overlay */}

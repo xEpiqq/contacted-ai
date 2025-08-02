@@ -706,7 +706,7 @@ const EnrichmentDrawer = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/30 z-10"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]"
             onClick={handleDrawerClose}
           />
           
@@ -717,7 +717,7 @@ const EnrichmentDrawer = ({
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -350, opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="fixed top-0 left-0 bottom-0 w-96 max-w-[90vw] bg-[#2b2b2b] border-r border-[#404040] shadow-lg text-sm text-neutral-200 z-30 flex flex-col"
+            className="fixed top-0 left-0 bottom-0 w-96 max-w-[90vw] bg-[#2b2b2b] border-r border-[#404040] shadow-lg text-sm text-neutral-200 z-[101] flex flex-col"
           >
             {/* Header */}
             <div className="flex justify-between items-center border-b border-[#404040] p-4">
